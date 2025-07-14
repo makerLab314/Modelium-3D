@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     // --- KONFIGURATION ---
     // Trage hier die URL deiner Vercel-API ein
-    const API_URL = 'https://3d-search-proxy-dein-name.vercel.app/api/search'; // WICHTIG: ANPASSEN!
+    const API_URL = 'https://modelium-proxy.vercel.app/api/search'; // WICHTIG: ANPASSEN!
 
     // --- ELEMENTE ---
     const searchInput = document.getElementById('searchInput');
