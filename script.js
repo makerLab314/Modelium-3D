@@ -48,52 +48,37 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function displayResults(results) {
-        if (results.length === 0) {
-            showStatus('Keine Modelle für deine Suche gefunden.');
-            return;
-        }
+// Ersetze deine bestehende displayResults Funktion mit dieser:
 
-        showStatus(`${results.length} Modelle gefunden.`);
+function displayResults(results) {
+    if (results.length === 0) {
+        showStatus('Keine Modelle für deine Suche gefunden.');
+        return;
+    }
 
-        results.forEach(item => {
-            const card = document.createElement('a');
-            card.className = 'result-card';
-            card.href = item.url;
-            card.target = '_blank';
-            card.rel = 'noopener noreferrer';
+    showStatus(`${results.length} Modelle gefunden.`);
 
-            card.innerHTML = `
-                <img src="${item.imageUrl}" alt="${item.title}" loading="lazy">
-                <div class="card-content">
-                    <h3 class="card-title">${escapeHtml(item.title)}</h3>
-                    <div class="card-footer">
-                        <span class="card-author">${escapeHtml(item.author) || 'Unbekannt'}</span>
-                        <span class="card-source ${item.source}">${item.source}</span>
-                    </div>
+    results.forEach(item => {
+        const card = document.createElement('a');
+        card.className = 'result-card';
+        card.href = item.url;
+        card.target = '_blank';
+        card.rel = 'noopener noreferrer';
+
+        // Die Author-Prüfung ist hier wichtig, da nicht jede API immer einen Autor liefert
+        const authorName = item.author ? escapeHtml(item.author) : 'Unbekannt';
+        const titleName = item.title ? escapeHtml(item.title) : 'Ohne Titel';
+
+        card.innerHTML = `
+            <img src="${item.imageUrl}" alt="${titleName}" loading="lazy">
+            <div class="card-content">
+                <h3 class="card-title">${titleName}</h3>
+                <div class="card-footer">
+                    <span class="card-author">${authorName}</span>
+                    <span class="card-source ${item.source}">${item.source}</span>
                 </div>
-            `;
-            resultsGrid.appendChild(card);
-        });
-    }
-
-    function setLoadingState(isLoading) {
-        spinner.style.display = isLoading ? 'block' : 'none';
-        searchButton.disabled = isLoading;
-        searchInput.disabled = isLoading;
-    }
-
-    function showStatus(message) {
-        statusContainer.textContent = message;
-    }
-    
-    // Kleine Helferfunktion, um HTML-Injection zu vermeiden
-    function escapeHtml(unsafe) {
-        return unsafe
-             .replace(/&/g, "&")
-             .replace(/</g, "<")
-             .replace(/>/g, ">")
-             .replace(/"/g, """)
-             .replace(/'/g, "'");
-    }
-});
+            </div>
+        `;
+        resultsGrid.appendChild(card);
+    }); // <-- Achte darauf, dass diese Zeile mit `);` endet
+} // <-- Und diese Zeile die Funktion mit `}` abschließt
