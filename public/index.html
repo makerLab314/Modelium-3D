@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Modelium 3D</title>
+    <meta
+      name="description"
+      content="One search box for Printables, Thingiverse and MakerWorld."
+    />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+    <script>
+      // Set the scheme before first paint so the page never flashes the wrong one.
+      const stored = localStorage.getItem("modelium.theme");
+      const preferred = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      document.documentElement.dataset.theme = stored || preferred;
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#results">Skip to results</a>
+
+    <header class="masthead">
+      <div class="masthead__inner">
+        <div class="wordmark">
+          <svg class="wordmark__mark" viewBox="0 0 32 32" aria-hidden="true">
+            <path d="M16 3 29 10.5 16 18 3 10.5 16 3Z" />
+            <path d="M3 10.5V21.5L16 29V18" />
+            <path d="M29 10.5V21.5L16 29" />
+          </svg>
+          <span class="wordmark__text">
+            <strong>Modelium</strong><span class="wordmark__suffix">3D</span>
+          </span>
+        </div>
+
+        <p class="masthead__tagline">
+          One search field. Three model libraries. Every hit links straight back to
+          the original page for the download.
+        </p>
+
+        <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch colour scheme">
+          <span class="theme-toggle__dot" aria-hidden="true"></span>
+          <span data-theme-label>Light</span>
+        </button>
+      </div>
+      <div class="ruler" aria-hidden="true"></div>
+    </header>
+
+    <main>
+      <section class="console" aria-label="Search">
+        <form class="console__form" data-search-form autocomplete="off">
+          <label class="field">
+            <span class="field__label">Query</span>
+            <div class="field__control">
+              <input
+                type="search"
+                name="q"
+                data-query-input
+                placeholder="voronoi lamp, cable clip, articulated dragon"
+                spellcheck="false"
+                aria-label="Search term"
+              />
+              <kbd class="field__hint" aria-hidden="true">/</kbd>
+            </div>
+          </label>
+
+          <button class="button button--primary" type="submit" data-submit>
+            <svg viewBox="0 0 20 20" aria-hidden="true" class="button__icon">
+              <circle cx="9" cy="9" r="6" />
+              <path d="M13.5 13.5 18 18" />
+            </svg>
+            <span>Search</span>
+          </button>
+        </form>
+
+        <div class="console__meta">
+          <div class="rail" role="group" aria-label="Sources">
+            <span class="rail__label">Sources</span>
+            <div class="rail__items" data-source-rail></div>
+          </div>
+
+          <label class="sort">
+            <span class="sort__label">Order</span>
+            <select data-sort>
+              <option value="relevance">Best match</option>
+              <option value="popular">Most liked</option>
+              <option value="newest">Newest</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="recent" data-recent hidden>
+          <span class="recent__label">Recent</span>
+          <div class="recent__items" data-recent-items></div>
+        </div>
+      </section>
+
+      <section id="results" class="results" aria-label="Results">
+        <div class="results__bar" data-results-bar hidden>
+          <p class="results__count" data-result-count role="status" aria-live="polite"></p>
+          <p class="results__timing" data-result-timing></p>
+        </div>
+
+        <div class="grid" data-grid></div>
+
+        <div class="state" data-state>
+          <svg class="state__art" viewBox="0 0 200 150" aria-hidden="true">
+            <defs>
+              <pattern id="dots" width="10" height="10" patternUnits="userSpaceOnUse">
+                <circle cx="1" cy="1" r="1" />
+              </pattern>
+            </defs>
+            <rect x="0" y="0" width="200" height="150" fill="url(#dots)" opacity="0.5" />
+            <g class="state__wire">
+              <path d="M100 32 152 62 100 92 48 62 100 32Z" />
+              <path d="M48 62v34l52 30V92" />
+              <path d="M152 62v34l-52 30" />
+              <path d="M100 32v60" opacity="0.45" />
+            </g>
+          </svg>
+          <h2 class="state__title" data-state-title>Nothing searched yet</h2>
+          <p class="state__body" data-state-body>
+            Type a term above. Modelium queries all three libraries at once and
+            merges the results into a single ranked list.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="colophon">
+      <p>
+        Modelium 3D is a local prototype. It links to the original listings and
+        hosts no model files of its own.
+      </p>
+      <p class="colophon__sources" data-colophon></p>
+    </footer>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
