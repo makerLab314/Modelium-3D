@@ -9,7 +9,6 @@
     "dev": "node --max-http-header-size=65536 --watch server/index.js",
     "test": "node --max-http-header-size=65536 --test \"test/**/*.test.js\"",
     "test:live": "node --max-http-header-size=65536 --test \"test/live/**/*.test.js\""
-    }
   },
   "engines": {
     "node": ">=20"
