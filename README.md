@@ -22,7 +22,7 @@ is enough.
 Two of the three sources work immediately. Thingiverse needs a free token, and
 the app asks for it on first run: click **Settings**, paste the token, press
 **Test** to confirm it works, then **Save**. It is written to `server/.env` and
-picked up straight away — no restart, no environment variables to export.
+picked up straight away ,  no restart, no environment variables to export.
 
 To get the token: create a **Desktop** app at
 <https://www.thingiverse.com/apps/create> and copy the **App Token**.
@@ -71,7 +71,7 @@ site's catalogue, not a duplicate to hide.
 | Source | Access | Notes |
 | --- | --- | --- |
 | Printables | Server rendered search page | Their GraphQL API has introspection disabled, but their SvelteKit page inlines the exact GraphQL response it rendered from. The adapter lifts that JSON back out, so it reads structured data rather than scraping markup. |
-| MakerWorld | `api/v1/search-service/select/design2` | Public, no key. The older `select/design` still answers `200` but always with an empty list — worth knowing, because that failure looks exactly like "no results". |
+| MakerWorld | `api/v1/search-service/select/design2` | Public, no key. The older `select/design` still answers `200` but always with an empty list ,  worth knowing, because that failure looks exactly like "no results". |
 | Thingiverse | `api.thingiverse.com` | Needs an app token, see above. |
 
 These are unofficial endpoints. They can change without notice, which is why
@@ -98,7 +98,7 @@ environment variables, which win over the file.
 | `USER_AGENT` | a desktop Chrome string | Sent upstream | no |
 
 `server/.env.example` documents the same list. Copy it to `server/.env` if you
-prefer editing a file to using the panel — the format is identical, and the app
+prefer editing a file to using the panel ,  the format is identical, and the app
 rewrites keys in place, so your comments survive.
 
 `server/.env` is git-ignored. Tokens never leave your machine: the settings API
@@ -179,7 +179,7 @@ npm run test:live
 
 The structure canary. This is the one that matters over time: it queries the
 three sites for real and asserts they still return the fields the adapters
-read — not which models come back, or how many. All three have broken silently
+read ,  not which models come back, or how many. All three have broken silently
 before, which is the failure this is built to catch.
 
 GitHub Actions runs it daily (`.github/workflows/ci.yml`). It needs no secrets:
