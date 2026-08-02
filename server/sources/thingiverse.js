@@ -19,24 +19,35 @@ export function isConfigured() {
   return Boolean(config.thingiverseToken);
 }
 
-export async function search(query, { limit, signal }) {
+export async function search(query, { limit, offset = 0, signal }) {
   if (!isConfigured()) {
     throw new MissingCredentialsError(
-      'Set THINGIVERSE_TOKEN to include Thingiverse',
+      'Add a Thingiverse token in Settings to include this source',
       TOKEN_DOCS,
     );
   }
 
+  const perPage = Math.min(limit, 30);
   const url = new URL(`${API}/search/${encodeURIComponent(query)}/`);
   url.searchParams.set('type', 'things');
   url.searchParams.set('sort', 'relevant');
-  url.searchParams.set('per_page', String(Math.min(limit, 30)));
-  url.searchParams.set('page', '1');
+  url.searchParams.set('per_page', String(perPage));
+  url.searchParams.set('page', String(Math.floor(offset / perPage) + 1));
 
-  const payload = await requestJson(url.toString(), {
-    signal,
-    headers: { authorization: `Bearer ${config.thingiverseToken}` },
-  });
+  let payload;
+  try {
+    payload = await requestJson(url.toString(), {
+      signal,
+      headers: { authorization: `Bearer ${config.thingiverseToken}` },
+    });
+  } catch (error) {
+    // A rejected token is a setup problem, not an outage — say so, and point at
+    // the page that issues a new one instead of leaving a bare 401.
+    if (error instanceof SourceError && /\b401\b/.test(error.message)) {
+      throw new MissingCredentialsError('Thingiverse rejected the token', TOKEN_DOCS);
+    }
+    throw error;
+  }
 
   // The API returns {total, hits: []} for search, but older deployments and
   // some proxies hand back a bare array. Accept both.

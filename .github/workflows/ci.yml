@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # 06:20 UTC daily. The point of this repo's CI is the live job below: the
+    # three upstreams are unofficial and change without notice, so the schedule
+    # is what turns "a site broke" into a notification instead of a bug report.
+    - cron: '20 6 * * *'
+  workflow_dispatch:
+
+# Nothing here needs write access, and nothing here needs a secret.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # No dependencies to install — the project has none.
+      - run: npm test
+
+  structure:
+    name: Upstream structure (${{ matrix.node }})
+    runs-on: ubuntu-latest
+    # A site being down must not fail a pull request; the scheduled run is what
+    # this job is for. Read the annotation, do not treat a red X here as a code
+    # regression.
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # Hits printables.com, makerworld.com and (only if a token is configured)
+      # api.thingiverse.com, and asserts that each still returns the fields the
+      # adapters read. Thingiverse skips itself when THINGIVERSE_TOKEN is empty,
+      # so no secret is required for this to be useful.
+      - name: Check the three sites still return the expected shape
+        run: npm run test:live
+        env:
+          THINGIVERSE_TOKEN: ${{ secrets.THINGIVERSE_TOKEN }}
+
+      - name: Explain a failure
+        if: failure()
+        run: |
+          echo "::warning::A source changed shape or was unreachable."
+          echo "This job talks to live sites. A failure usually means one of them"
+          echo "changed its API or page structure — see server/sources/ for the"
+          echo "adapter that needs updating. It can also just be a transient outage"
+          echo "or a bot filter reacting to GitHub's network."

@@ -79,7 +79,7 @@ test('a source that needs credentials says so instead of failing silently', asyn
     const report = await searchSource('thingiverse', 'benchy');
 
     assert.equal(report.status, 'needs-key');
-    assert.match(report.message, /THINGIVERSE_TOKEN/);
+    assert.match(report.message, /token/i);
     assert.equal(report.docsUrl, 'https://www.thingiverse.com/apps/create');
     assert.deepEqual(report.items, []);
   } finally {

@@ -5,26 +5,44 @@ export const id = 'makerworld';
 export const label = 'MakerWorld';
 export const homepage = 'https://makerworld.com';
 
-const SEARCH = 'https://makerworld.com/api/v1/search-service/select/design';
-
 /**
  * MakerWorld powers its own site with this endpoint, so no key is needed.
- * It does sit behind a bot filter that reacts to the caller's network, which
- * is why a request can come back reachable but empty. That case is reported
- * as such instead of being dressed up as "no results".
+ *
+ * Note the `2`: the older `select/design` still answers 200 but has returned an
+ * empty hit list since MakerWorld moved the site over, which looks exactly like
+ * "nothing matched". `select/design2` is what their search page calls now. The
+ * site also sends a `searchSessionId`, but that is analytics — omitting it
+ * changes nothing about the results.
+ *
+ * The HTML search page is not an option as a fallback: it sits behind a
+ * Cloudflare interstitial that a server side fetch cannot clear. The JSON API
+ * is not challenged.
  */
-export async function search(query, { limit, signal }) {
+const SEARCH = 'https://makerworld.com/api/v1/search-service/select/design2';
+
+export async function search(query, { limit, offset = 0, signal }) {
   const url = new URL(SEARCH);
   url.searchParams.set('keyword', query);
-  url.searchParams.set('offset', '0');
+  url.searchParams.set('orderBy', 'score');
+  url.searchParams.set('designType', '0');
+  url.searchParams.set('isFromSearchList', 'false');
+  url.searchParams.set('offset', String(offset));
   url.searchParams.set('limit', String(Math.min(limit, 40)));
 
   const payload = await requestJson(url.toString(), {
     signal,
-    headers: { referer: `https://makerworld.com/en/search/models?keyword=${encodeURIComponent(query)}` },
+    headers: {
+      referer: `https://makerworld.com/en/search/models?keyword=${encodeURIComponent(query)}`,
+      origin: 'https://makerworld.com',
+    },
   });
 
+  // `hits: null` with a non-zero total is how the bot filter answers. Reporting
+  // that as an empty result set would be a lie, so it is surfaced as blocked.
   const hits = payload?.hits;
+  if (hits === null && Number(payload?.total) > 0) {
+    throw new SourceError('MakerWorld returned no items for a non-empty result set', 'blocked');
+  }
   if (!Array.isArray(hits)) {
     throw new SourceError('Unexpected answer from the MakerWorld API', 'unavailable');
   }

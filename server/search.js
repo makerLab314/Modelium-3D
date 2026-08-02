@@ -12,13 +12,14 @@ export { SORT_MODES };
  * Query one source and never throw: a dead source must not take the other two
  * down with it. The returned report is what the UI shows in the source rail.
  */
-export async function searchSource(sourceId, query, { signal } = {}) {
+export async function searchSource(sourceId, query, { signal, page = 1 } = {}) {
   const source = getSource(sourceId);
   if (!source) {
     return report(sourceId, sourceId, 'error', { message: 'Unknown source' });
   }
 
-  const cacheKey = `${sourceId}::${query.toLowerCase()}`;
+  const limit = config.perSourceLimit;
+  const cacheKey = `${sourceId}::${query.toLowerCase()}::${page}::${limit}`;
   const cached = cache.get(cacheKey);
   if (cached) return { ...cached, cached: true };
 
@@ -26,7 +27,8 @@ export async function searchSource(sourceId, query, { signal } = {}) {
 
   try {
     const { items, total } = await source.search(query, {
-      limit: config.perSourceLimit,
+      limit,
+      offset: (page - 1) * limit,
       signal,
     });
 
@@ -56,15 +58,22 @@ export async function searchSource(sourceId, query, { signal } = {}) {
 }
 
 /** Fuse a set of per source reports into the final result list. */
-export function merge(reports, query, sort = 'relevance') {
-  const lists = reports
-    .filter((report) => report.status === 'ok')
-    .map((report) => ({ source: report.source, items: report.items }));
+export function merge(reports, query, sort = 'relevance', page = 1) {
+  const answered = reports.filter((report) => report.status === 'ok');
+  const lists = answered.map((report) => ({ source: report.source, items: report.items }));
 
   const results = sortResults(dedupe(fuse(lists, query)), sort);
 
+  // Offer another page only while at least one site still has stock: it filled
+  // the page it was asked for *and* claims a larger total.
+  const hasMore = answered.some(
+    (report) => report.items.length >= config.perSourceLimit && report.total > page * config.perSourceLimit,
+  );
+
   return {
     sort: SORT_MODES.includes(sort) ? sort : 'relevance',
+    page,
+    hasMore,
     sources: reports.map(({ items, ...rest }) => ({ ...rest, count: items.length })),
     results,
   };

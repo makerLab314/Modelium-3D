@@ -6,7 +6,7 @@
 export class SourceError extends Error {
   /**
    * @param {string} message human readable, shown in the UI
-   * @param {'unavailable'|'needs-key'|'timeout'|'blocked'} kind
+   * @param {'unavailable'|'needs-key'|'timeout'|'blocked'|'misconfigured'} kind
    */
   constructor(message, kind = 'unavailable') {
     super(message);

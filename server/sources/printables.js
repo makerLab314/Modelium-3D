@@ -50,10 +50,11 @@ export function extractModels(html) {
   return sawResultList ? { items: [], totalCount: 0 } : null;
 }
 
-export async function search(query, { limit, signal }) {
+export async function search(query, { limit, offset = 0, signal }) {
   const url = new URL('https://www.printables.com/search/models');
   url.searchParams.set('q', query);
   url.searchParams.set('ordering', 'best_match');
+  if (offset > 0) url.searchParams.set('page', String(Math.floor(offset / limit) + 1));
 
   const html = await requestText(url.toString(), {
     signal,

@@ -7,6 +7,8 @@
  * source lands and the merged ranking changes.
  */
 
+import { createSettings } from "./settings.js";
+
 const el = {
   form: document.querySelector("[data-search-form]"),
   input: document.querySelector("[data-query-input]"),
@@ -25,11 +27,20 @@ const el = {
   colophon: document.querySelector("[data-colophon]"),
   themeToggle: document.querySelector("[data-theme-toggle]"),
   themeLabel: document.querySelector("[data-theme-label]"),
+  setup: document.querySelector("[data-setup]"),
+  setupTitle: document.querySelector("[data-setup-title]"),
+  setupText: document.querySelector("[data-setup-text]"),
+  setupDismiss: document.querySelector("[data-setup-dismiss]"),
+  settingsBadge: document.querySelector("[data-settings-badge]"),
+  more: document.querySelector("[data-more]"),
+  moreButton: document.querySelector("[data-more-button]"),
+  moreLabel: document.querySelector("[data-more-label]"),
 };
 
 const RECENT_KEY = "modelium.recent";
 const SOURCES_KEY = "modelium.sources";
 const THEME_KEY = "modelium.theme";
+const SETUP_KEY = "modelium.setupDismissed";
 const MAX_RECENT = 8;
 
 const compact = new Intl.NumberFormat(undefined, { notation: "compact" });
@@ -43,7 +54,12 @@ const state = {
   results: [],
   stream: null,
   query: "",
+  page: 1,
+  hasMore: false,
+  health: null,
 };
+
+const settings = createSettings({ onSaved: onSettingsSaved });
 
 init();
 
@@ -53,6 +69,11 @@ async function init() {
   el.form.addEventListener("submit", onSubmit);
   el.sort.addEventListener("change", () => {
     if (state.query) runSearch(state.query);
+  });
+  el.moreButton.addEventListener("click", loadMore);
+  el.setupDismiss.addEventListener("click", () => {
+    localStorage.setItem(SETUP_KEY, "1");
+    el.setup.hidden = true;
   });
 
   document.addEventListener("keydown", (event) => {
@@ -68,16 +89,35 @@ async function init() {
   restoreFromUrl();
 }
 
+/**
+ * Saving a token can make a previously dead source live, so the rail is rebuilt
+ * and the current search re-run rather than left showing the old failure.
+ */
+async function onSettingsSaved() {
+  const enabledBefore = new Set(state.enabled);
+  await loadSources();
+  state.enabled = new Set([...enabledBefore].filter((id) => state.sources.some((s) => s.id === id)));
+  if (!state.enabled.size) state.enabled = new Set(state.sources.map((source) => source.id));
+  state.plates.forEach((plate, id) =>
+    plate.button.setAttribute("aria-pressed", String(state.enabled.has(id))),
+  );
+  if (state.query) runSearch(state.query);
+}
+
 /* --- Sources ------------------------------------------------------------ */
 
 async function loadSources() {
   try {
-    const response = await fetch("/api/sources");
+    const response = await fetch("/api/health");
     const payload = await response.json();
+    state.health = payload;
     state.sources = payload.sources ?? [];
   } catch {
+    state.health = null;
     state.sources = [];
   }
+
+  renderSetup();
 
   const remembered = readJson(SOURCES_KEY);
   state.enabled = new Set(
@@ -100,7 +140,7 @@ function buildPlate(source) {
     "aria-pressed": String(state.enabled.has(source.id)),
     title: source.configured
       ? `Include ${source.label} in the search`
-      : `${source.label} needs an API token, see the README`,
+      : `${source.label} needs a token — add one under Settings`,
   });
 
   const dot = element("span", { class: "plate__dot" });
@@ -128,6 +168,45 @@ function setPlate(sourceId, status, count) {
   plate.button.dataset.status = status;
   plate.count.textContent = count > 0 ? plain.format(count) : "0";
   plate.count.dataset.empty = String(!count);
+}
+
+/**
+ * Two things can be wrong before a single search runs: the process is missing
+ * the HTTP header limit Printables needs, or a source has no token. The first
+ * is not dismissible because nothing the user does in the page can fix it.
+ */
+function renderSetup() {
+  const unconfigured = state.sources.filter((source) => !source.configured);
+  const headerBroken = state.health && state.health.headerLimitOk === false;
+
+  el.settingsBadge.hidden = !unconfigured.length;
+
+  if (headerBroken) {
+    el.setup.hidden = false;
+    el.setup.dataset.tone = "warn";
+    el.setupTitle.textContent = "The server needs to be restarted properly";
+    el.setupText.textContent =
+      `Node is running with a ${Math.round(state.health.headerLimit / 1024)} KB HTTP header limit. ` +
+      "Printables sends larger headers and will fail. Stop the server and start it with `npm start`.";
+    el.setupDismiss.hidden = true;
+    return;
+  }
+
+  el.setupDismiss.hidden = false;
+
+  if (!unconfigured.length || localStorage.getItem(SETUP_KEY) === "1") {
+    el.setup.hidden = true;
+    return;
+  }
+
+  const names = unconfigured.map((source) => source.label).join(" and ");
+  el.setup.hidden = false;
+  el.setup.dataset.tone = "info";
+  el.setupTitle.textContent = `${names} still needs a token`;
+  el.setupText.textContent =
+    `Searching works without it — you just get results from the other ${
+      state.sources.length - unconfigured.length === 1 ? "site" : "sites"
+    }. ` + "The token is free and is stored on this machine only.";
 }
 
 function linkList(sources) {
@@ -158,32 +237,46 @@ function onSubmit(event) {
   runSearch(query);
 }
 
-function runSearch(query) {
+function runSearch(query, { page = 1 } = {}) {
   state.stream?.close();
   state.query = query;
-  state.reports.clear();
-  state.results = [];
+  state.page = page;
+
+  // A fresh search replaces everything; "Load more" keeps what is on screen and
+  // appends the next page underneath it.
+  const append = page > 1;
+  const kept = append ? state.results : [];
+  if (!append) {
+    state.reports.clear();
+    state.results = [];
+    state.hasMore = false;
+  }
 
   el.input.value = query;
   el.submit.disabled = true;
+  el.moreButton.disabled = true;
+  el.moreLabel.textContent = append ? "Loading…" : "Load more";
   writeUrl(query);
 
   const selected = [...state.enabled];
-  selected.forEach((id) => setPlate(id, "loading", 0));
+  selected.forEach((id) => setPlate(id, "loading", append ? state.reports.get(id)?.count ?? 0 : 0));
   state.sources
     .filter((source) => !state.enabled.has(source.id))
     .forEach((source) => setPlate(source.id, "idle", 0));
 
-  showSkeletons(selected.length);
-  hideState();
-  el.bar.hidden = false;
-  el.count.textContent = "Searching";
-  el.timing.textContent = selected.map((id) => labelOf(id)).join(" · ");
+  if (!append) {
+    showSkeletons(selected.length);
+    hideState();
+    el.bar.hidden = false;
+    el.count.textContent = "Searching";
+    el.timing.textContent = selected.map((id) => labelOf(id)).join(" · ");
+  }
 
   const params = new URLSearchParams({
     q: query,
     sort: el.sort.value,
     sources: selected.join(","),
+    page: String(page),
     stream: "1",
   });
 
@@ -198,7 +291,8 @@ function runSearch(query) {
 
   stream.addEventListener("results", (event) => {
     const payload = JSON.parse(event.data);
-    state.results = payload.results ?? [];
+    state.hasMore = Boolean(payload.hasMore);
+    state.results = append ? concatUnique(kept, payload.results ?? []) : (payload.results ?? []);
     render();
   });
 
@@ -217,6 +311,8 @@ function runSearch(query) {
     stream.close();
     state.stream = null;
     el.submit.disabled = false;
+    el.moreButton.disabled = false;
+    el.moreLabel.textContent = "Load more";
     if (!state.results.length) {
       el.grid.replaceChildren();
       showState(
@@ -225,6 +321,17 @@ function runSearch(query) {
       );
     }
   };
+}
+
+function loadMore() {
+  if (!state.query || state.stream) return;
+  runSearch(state.query, { page: state.page + 1 });
+}
+
+/** Later pages can repeat a hit the previous page already showed. */
+function concatUnique(existing, incoming) {
+  const seen = new Set(existing.map((item) => item.id));
+  return [...existing, ...incoming.filter((item) => !seen.has(item.id))];
 }
 
 /* --- Rendering ---------------------------------------------------------- */
@@ -249,10 +356,18 @@ function render() {
   container.querySelectorAll(".notice").forEach((node) => node.remove());
   notices.reverse().forEach((notice) => container.insertBefore(notice, el.grid));
 
+  el.more.hidden = !(done && total > 0 && state.hasMore);
+  el.moreButton.disabled = false;
+  el.moreLabel.textContent = "Load more";
+
   if (done && !total) {
+    const failed = [...state.reports.values()].filter((report) => report.status !== "ok");
+    const answered = state.reports.size - failed.length;
     showState(
-      "No models found",
-      `Nothing matched "${state.query}" on the selected sites. Try a shorter or more common term.`,
+      answered ? "No models found" : "No site could be reached",
+      answered
+        ? `Nothing matched "${state.query}" on the ${answered === 1 ? "site that answered" : "sites that answered"}. Try a shorter or more common term.`
+        : "Every selected source failed. The notices above say what each one reported.",
     );
   } else {
     hideState();
@@ -338,28 +453,43 @@ function buildStats(item) {
   return row;
 }
 
+const NOTICE_HEADS = {
+  "needs-key": (label) => `${label} is not set up yet`,
+  timeout: (label) => `${label} took too long`,
+  blocked: (label) => `${label} turned us away`,
+  misconfigured: (label) => `${label} cannot be queried by this server`,
+};
+
 function buildNotices() {
   return [...state.reports.values()]
     .filter((report) => report.status !== "ok")
     .map((report) => {
-      const notice = element("div", { class: "notice" });
+      const notice = element("div", { class: "notice", "data-kind": report.status });
+      const head = NOTICE_HEADS[report.status] ?? ((label) => `${label} unavailable`);
+
       notice.append(
-        element("span", { class: "notice__head" }, `${report.sourceLabel} unavailable`),
+        element("span", { class: "notice__head" }, head(report.sourceLabel)),
         element("span", {}, report.message ?? "The site did not answer."),
       );
-      if (report.docsUrl) {
+
+      // A missing token is the one failure the user can fix from here.
+      if (report.status === "needs-key") {
+        const action = element("button", { class: "notice__action", type: "button" }, "Open settings");
+        action.addEventListener("click", () => settings.open());
+        notice.append(action);
+      } else if (report.docsUrl) {
         const line = element("span", {});
         line.append(
-          document.createTextNode("Get a free token at "),
+          document.createTextNode("More at "),
           element(
             "a",
             { href: report.docsUrl, target: "_blank", rel: "noopener noreferrer" },
             report.docsUrl,
           ),
-          document.createTextNode(" and restart the server with it."),
         );
         notice.append(line);
       }
+
       return notice;
     });
 }
@@ -376,6 +506,7 @@ function showSkeletons(sourceCount) {
   });
   el.grid.replaceChildren(...cards);
   el.grid.parentElement.querySelectorAll(".notice").forEach((node) => node.remove());
+  el.more.hidden = true;
 }
 
 function showState(title, body) {

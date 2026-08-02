@@ -38,15 +38,43 @@
           the original page for the download.
         </p>
 
-        <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch colour scheme">
-          <span class="theme-toggle__dot" aria-hidden="true"></span>
-          <span data-theme-label>Light</span>
-        </button>
+        <div class="masthead__tools">
+          <button class="tool-button" type="button" data-settings-open>
+            <svg viewBox="0 0 20 20" aria-hidden="true" class="tool-button__icon">
+              <circle cx="10" cy="10" r="2.6" />
+              <path
+                d="M10 2.4v2.1M10 15.5v2.1M17.6 10h-2.1M4.5 10H2.4M15.4 4.6l-1.5 1.5M6.1 13.9l-1.5 1.5M15.4 15.4l-1.5-1.5M6.1 6.1 4.6 4.6"
+              />
+            </svg>
+            <span>Settings</span>
+            <span class="tool-button__badge" data-settings-badge hidden aria-hidden="true"></span>
+          </button>
+
+          <button class="tool-button" type="button" data-theme-toggle aria-label="Switch colour scheme">
+            <span class="theme-toggle__dot" aria-hidden="true"></span>
+            <span data-theme-label>Light</span>
+          </button>
+        </div>
       </div>
       <div class="ruler" aria-hidden="true"></div>
     </header>
 
     <main>
+      <!-- Shown on first run while a source still needs a token. -->
+      <section class="setup" data-setup hidden>
+        <div class="setup__body">
+          <p class="setup__label">Setup</p>
+          <h2 class="setup__title" data-setup-title></h2>
+          <p class="setup__text" data-setup-text></p>
+        </div>
+        <div class="setup__actions">
+          <button class="button button--primary" type="button" data-settings-open>Add token</button>
+          <button class="button button--ghost" type="button" data-setup-dismiss>
+            Not now
+          </button>
+        </div>
+      </section>
+
       <section class="console" aria-label="Search">
         <form class="console__form" data-search-form autocomplete="off">
           <label class="field">
@@ -103,6 +131,12 @@
 
         <div class="grid" data-grid></div>
 
+        <div class="more" data-more hidden>
+          <button class="button button--ghost" type="button" data-more-button>
+            <span data-more-label>Load more</span>
+          </button>
+        </div>
+
         <div class="state" data-state>
           <svg class="state__art" viewBox="0 0 200 150" aria-hidden="true">
             <defs>
@@ -134,6 +168,38 @@
       </p>
       <p class="colophon__sources" data-colophon></p>
     </footer>
+
+    <dialog class="sheet" data-settings-dialog aria-label="Settings">
+      <form class="sheet__form" method="dialog" data-settings-form>
+        <header class="sheet__head">
+          <div>
+            <p class="sheet__label">Configuration</p>
+            <h2 class="sheet__title">Settings</h2>
+          </div>
+          <button
+            class="sheet__close"
+            type="button"
+            data-settings-close
+            aria-label="Close settings"
+          >
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15" /></svg>
+          </button>
+        </header>
+
+        <div class="sheet__fields" data-settings-fields>
+          <p class="sheet__loading">Loading…</p>
+        </div>
+
+        <footer class="sheet__foot">
+          <p class="sheet__file" data-settings-file></p>
+          <div class="sheet__buttons">
+            <p class="sheet__status" data-settings-status role="status" aria-live="polite"></p>
+            <button class="button button--ghost" type="button" data-settings-close>Close</button>
+            <button class="button button--primary" type="submit" data-settings-save>Save</button>
+          </div>
+        </footer>
+      </form>
+    </dialog>
 
     <script type="module" src="app.js"></script>
   </body>

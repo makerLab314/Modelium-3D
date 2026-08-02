@@ -20,7 +20,16 @@ const MIME = {
  * @returns {Promise<boolean>} true when the request was answered
  */
 export async function serveStatic(root, urlPath, response) {
-  const relative = decodeURIComponent(urlPath).replace(/^\/+/, '');
+  let relative;
+  try {
+    relative = decodeURIComponent(urlPath).replace(/^\/+/, '');
+  } catch {
+    return false; // malformed percent-encoding is a 404, not a crash
+  }
+
+  // A NUL byte can truncate the path inside the OS call, past the check below.
+  if (relative.includes('\0')) return false;
+
   const target = path.resolve(root, relative === '' ? 'index.html' : relative);
 
   if (target !== root && !target.startsWith(root + path.sep)) return false;

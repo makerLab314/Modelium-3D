@@ -877,3 +877,430 @@ main {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ==========================================================================
+   Masthead tools, setup banner, settings sheet, pagination.
+   Added when the prototype grew a configuration surface.
+   ========================================================================== */
+
+.masthead__tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Same machined chip as .theme-toggle; that class now only carries its dot. */
+.tool-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.7rem;
+  background: transparent;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.tool-button:hover {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+.tool-button__icon {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+/* A single dot, not a count: "something in here still needs you". */
+.tool-button__badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--signal);
+  box-shadow: 0 0 0 2px var(--paper);
+}
+
+/* --- First run setup banner --------------------------------------------- */
+
+.setup {
+  max-width: 1180px;
+  margin: 1.5rem auto 0;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--rule-strong);
+  border-left: 3px solid var(--signal);
+  border-radius: var(--radius);
+  background: var(--card);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem 1.5rem;
+}
+
+.setup[data-tone="warn"] {
+  background: color-mix(in srgb, var(--signal) 8%, var(--card));
+}
+
+.setup__label {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.3rem;
+}
+
+.setup__title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.setup__text {
+  font-size: 0.86rem;
+  color: var(--ink-soft);
+  max-width: 68ch;
+  line-height: 1.5;
+}
+
+.setup__actions {
+  display: inline-flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+/* A quieter sibling of .button for secondary actions. */
+.button--ghost {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--rule-strong);
+}
+
+.button--ghost:hover {
+  border-color: var(--ink);
+}
+
+/* --- Load more ----------------------------------------------------------- */
+
+.more {
+  display: flex;
+  justify-content: center;
+  padding: 2rem 0 0.5rem;
+}
+
+/* --- Settings sheet ------------------------------------------------------ */
+
+.sheet {
+  width: min(560px, calc(100vw - 2rem));
+  max-height: min(84vh, 780px);
+  padding: 0;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: var(--shadow-lift);
+}
+
+.sheet::backdrop {
+  background: rgb(12 12 14 / 0.42);
+  backdrop-filter: blur(2px);
+}
+
+.sheet__form {
+  display: flex;
+  flex-direction: column;
+  max-height: inherit;
+}
+
+.sheet__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.15rem 1.35rem 0.9rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.sheet__label {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.sheet__title {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin-top: 0.15rem;
+}
+
+.sheet__close {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  padding: 0.3rem;
+  cursor: pointer;
+  color: var(--muted);
+  line-height: 0;
+}
+
+.sheet__close:hover {
+  color: var(--ink);
+  border-color: var(--rule-strong);
+}
+
+.sheet__close svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.sheet__fields {
+  overflow-y: auto;
+  padding: 0.4rem 1.35rem 1rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.sheet__loading {
+  color: var(--muted);
+  font-size: 0.88rem;
+  padding: 1rem 0;
+}
+
+.sheet__foot {
+  border-top: 1px solid var(--rule);
+  padding: 0.85rem 1.35rem 1rem;
+  display: grid;
+  gap: 0.6rem;
+  background: var(--paper-sunk);
+}
+
+.sheet__file {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.sheet__buttons {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+.sheet__buttons .button {
+  padding: 0.55rem 1rem;
+  font-size: 0.88rem;
+}
+
+.sheet__status {
+  margin-right: auto;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.sheet__status[data-tone="ok"] {
+  color: var(--printables);
+}
+
+.sheet__status[data-tone="error"] {
+  color: var(--signal);
+}
+
+/* --- One setting --------------------------------------------------------- */
+
+.field-row {
+  padding: 0.9rem 0;
+  border-bottom: 1px dashed var(--rule);
+  display: grid;
+  gap: 0.4rem;
+}
+
+.field-row:last-child {
+  border-bottom: 0;
+}
+
+.field-row__head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.field-row__label {
+  font-size: 0.9rem;
+  font-weight: 550;
+}
+
+.field-row__badge {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  padding: 0.05rem 0.35rem;
+}
+
+.field-row__input {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.field-row__input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.field-row__secret {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.field-row__clear {
+  flex-shrink: 0;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  padding: 0 0.6rem;
+  cursor: pointer;
+  font-size: 0.78rem;
+}
+
+.field-row__clear:hover {
+  color: var(--signal);
+  border-color: var(--signal);
+}
+
+.field-row__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.86rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.field-row__check {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+}
+
+.field-row__help {
+  font-size: 0.79rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.field-row__link {
+  font-size: 0.79rem;
+  color: var(--accent);
+  justify-self: start;
+}
+
+.field-row__test {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.1rem;
+}
+
+.field-row__testbutton {
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-soft);
+  padding: 0.25rem 0.7rem;
+  cursor: pointer;
+  font-size: 0.78rem;
+}
+
+.field-row__testbutton:hover:not([disabled]) {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.field-row__testbutton[disabled] {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.field-row__testresult {
+  font-size: 0.79rem;
+  color: var(--muted);
+}
+
+.field-row__testresult[data-ok="true"] {
+  color: var(--printables);
+}
+
+.field-row__testresult[data-ok="false"] {
+  color: var(--signal);
+}
+
+/* --- Notice action ------------------------------------------------------- */
+
+.notice__action {
+  justify-self: start;
+  margin-top: 0.2rem;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  padding: 0.25rem 0.7rem;
+  cursor: pointer;
+  font-size: 0.79rem;
+}
+
+.notice__action:hover {
+  border-color: var(--ink);
+}
+
+/* A source that only needs configuring is not an outage; tone it down. */
+.notice[data-kind="needs-key"] {
+  border-left-color: var(--rule-strong);
+}
+
+@media (max-width: 720px) {
+  .setup {
+    margin-inline: 1rem;
+  }
+
+  .setup__actions {
+    width: 100%;
+  }
+
+  .setup__actions .button {
+    flex: 1;
+    justify-content: center;
+  }
+}
