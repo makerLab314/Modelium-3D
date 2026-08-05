@@ -12,25 +12,98 @@ the wire, not spread across three fetches in the page.
 
 ## Getting started
 
+Pick whichever fits. All three run the same code; they differ only in where the
+settings live and who can change them.
+
+### Try it
+
 ```bash
+npx modelium-3d
+```
+
+Opens a browser at <http://127.0.0.1:8787>. Nothing to install, nothing to clone,
+Node 20 or newer is enough. `--port`, `--host` and `--no-open` are there if you
+need them; `--help` lists the rest.
+
+### On a homelab
+
+```bash
+docker compose up -d
+```
+
+The container runs in **server mode**: it binds every interface, and its settings
+are read-only, with configuration coming from environment variables, because a panel
+that can rewrite an API token should not be a thing anyone on the network can
+reach. See [Modes](#modes) below for the one exception, which is how you get a
+Thingiverse token in there on the first run.
+
+`docker-compose.yml` publishes on `127.0.0.1` by default. Widen it deliberately:
+there is no login.
+
+### From the source
+
+```bash
+git clone https://github.com/makerLab314/Modelium-3D
+cd Modelium-3D
 npm start
 ```
 
-Then open <http://127.0.0.1:8787>. No dependencies to install, Node 20 or newer
-is enough.
+No dependencies to install. If you would rather not have a git repository, every
+[release](https://github.com/makerLab314/Modelium-3D/releases) carries a plain
+tarball of the same files.
+
+### The Thingiverse token
 
 Two of the three sources work immediately. Thingiverse needs a free token, and
 the app asks for it on first run: click **Settings**, paste the token, press
-**Test** to confirm it works, then **Save**. It is written to `server/.env` and
-picked up straight away ,  no restart, no environment variables to export.
+**Test** to confirm it works, then **Save**. It is picked up straight away, with
+no restart and no environment variables to export.
 
-To get the token: create a **Desktop** app at
+To get one: create a **Desktop** app at
 <https://www.thingiverse.com/apps/create> and copy the **App Token**.
 
-> Always start with `npm start`, not `node server/index.js`. Printables answers
-> with an ~18 KB `Link` header and Node rejects responses over 16 KB of headers
-> by default, so the start script passes `--max-http-header-size=65536`. If you
-> start it the other way the app tells you, both in the terminal and in the page.
+Where it is stored depends on how you started the app, and the Settings panel shows
+the exact path. A checkout keeps it in `server/.env`; an installed copy uses your
+OS config directory (`~/.config/modelium-3d/` or `%APPDATA%\modelium-3d\`), since
+`node_modules` is replaced on every upgrade; the container uses `/data`.
+
+## Modes
+
+`MODELIUM_MODE` decides who may change the settings, and it is the one setting
+worth understanding before exposing this to a network.
+
+| | `local` (default) | `server` |
+| --- | --- | --- |
+| Binds | `127.0.0.1` | `0.0.0.0` |
+| Reading settings | yes | yes, without the file path or any part of the token |
+| Writing settings | from this machine | environment variables only, plus one first-run window |
+
+In `local` mode the settings panel may write your token because the request
+provably came from this machine. That proof is the connection's own address,
+which a reverse proxy on the same host turns into `127.0.0.1` for every caller on
+earth. There is no heuristic that survives that, so the app refuses to start in
+`local` mode on anything but a loopback address rather than pretending otherwise.
+If something sits in front of it, use `server` mode.
+
+**The first-run window.** A fresh `server` mode instance would otherwise be
+impossible to configure through its own interface. So it opens once: for 15
+minutes, it accepts a single save from whoever presents the claim token it printed
+at startup.
+
+```bash
+docker logs modelium      # the token is in here, once
+```
+
+Paste it into the Settings panel, save, and the window closes for good. A marker
+in `/data` keeps it closed across restarts. It also closes on the deadline, after
+ten wrong tokens, or if the config directory is not writable (in which case it
+never opens at all, and says so). The token is never written to disk, never
+returned by any endpoint, and never logged twice.
+
+That means anyone who can read the container's logs during those 15 minutes can
+claim the instance. That is the operator, by definition, but it is worth knowing
+rather than discovering. Set `MODELIUM_SETUP=false` to skip the window entirely
+and configure only through the environment.
 
 ## How it works
 
@@ -70,9 +143,19 @@ site's catalogue, not a duplicate to hide.
 
 | Source | Access | Notes |
 | --- | --- | --- |
-| Printables | Server rendered search page | Their GraphQL API has introspection disabled, but their SvelteKit page inlines the exact GraphQL response it rendered from. The adapter lifts that JSON back out, so it reads structured data rather than scraping markup. |
-| MakerWorld | `api/v1/search-service/select/design2` | Public, no key. The older `select/design` still answers `200` but always with an empty list ,  worth knowing, because that failure looks exactly like "no results". |
+| Printables | `api.printables.com/graphql/`, field `searchPrints2` | No key, and no allowlist of permitted queries. Introspection is off, so the field names come from the site's own bundles rather than from the schema. Replaced an earlier approach that lifted the payload out of the rendered search page: 17 KB instead of 730, and no `Link` header large enough to need a Node startup flag. |
+| MakerWorld | `api/v1/search-service/select/design2` | Public, no key. The older `select/design` still answers `200` but always with an empty list, which is worth knowing, because that failure looks exactly like "no results". |
 | Thingiverse | `api.thingiverse.com` | Needs an app token, see above. |
+
+Note what "no key" does not mean. PrusaSlicer and Prusa's firmware are open
+source; printables.com is not, and neither of the first two endpoints is
+documented or promised to anyone. They are the ones each site's own frontend
+calls. That makes them cleaner to read than scraped markup, not more official,
+which is what `npm run test:live` is for.
+
+Printables renamed `club` to `premium` at some point before this was written.
+Nothing announced it; the query simply started failing. That is the shape these
+breakages take.
 
 These are unofficial endpoints. They can change without notice, which is why
 each adapter is isolated: if one breaks, the other two keep working and the UI
@@ -92,19 +175,45 @@ environment variables, which win over the file.
 | `HIDE_NSFW` | `true` | Drop models a site flagged as not safe for work | yes |
 | `PROXY_IMAGES` | `true` | Serve result images through the local server | yes |
 | `PORT` | `8787` | Server port (restart to apply) | yes |
-| `HOST` | `127.0.0.1` | Bind address | no |
+| `HOST` | loopback, or `0.0.0.0` in server mode | Bind address | no |
+| `MODELIUM_MODE` | `local` | `local` or `server`, see [Modes](#modes) | no |
+| `MODELIUM_CONFIG_DIR` | see above | Directory holding `.env` and the setup marker | no |
+| `MODELIUM_ENV_FILE` | none | An explicit settings file, overriding the directory | no |
+| `MODELIUM_SETUP` | `true` | Whether the first-run window may open at all | no |
+| `MODELIUM_SETUP_WINDOW_MS` | `900000` | How long it stays open | no |
+| `MODELIUM_RATE_LIMIT` | on in server mode | `off` disables it | no |
 | `CACHE_TTL_MS` | `300000` | How long a search stays cached in memory | no |
 | `CACHE_MAX_ENTRIES` | `200` | Cache size | no |
 | `USER_AGENT` | a desktop Chrome string | Sent upstream | no |
 
-`server/.env.example` documents the same list. Copy it to `server/.env` if you
-prefer editing a file to using the panel ,  the format is identical, and the app
-rewrites keys in place, so your comments survive.
+`server/.env.example` documents the same list. Copy it into place if you prefer
+editing a file to using the panel: the format is identical, and the app rewrites
+keys in place, so your comments survive. The file is written atomically and set
+to `0600`, and it is git-ignored.
 
-`server/.env` is git-ignored. Tokens never leave your machine: the settings API
-only answers requests coming from loopback with a local `Host` header, and
-reading settings returns whether a secret is set plus its last four characters,
-never the value.
+## Security
+
+Worth stating plainly, because this ships as a server:
+
+- **There is no login.** `server` mode changes who may *write* settings, not who
+  may search. Anyone who can reach the port can use it. Put it behind something
+  if that matters.
+- **Tokens do not leave the machine.** Reading settings reports whether a secret
+  is set and its last four characters; in `server` mode not even that, nor the
+  file's path.
+- **The image proxy is not an open relay.** Seven CDN hosts are allowed, matched
+  by exact hostname, and every redirect hop is re-checked against the same list:
+  the allowlist is not just applied to the URL you hand it. What comes back is
+  typed from its own first bytes rather than from the upstream's `Content-Type`,
+  so a file uploaded as HTML or SVG cannot be served as script on this origin.
+- **`X-Forwarded-For` is never read**, anywhere. It is set by whatever is in front
+  of the server, which in the worst case is the caller.
+- Every response carries a strict `Content-Security-Policy`, `nosniff`, and
+  `frame-ancestors 'none'`. No CORS headers are sent, deliberately: another origin
+  can cause a request but can never read the answer.
+
+Found something? Open an issue, or, if it is sensitive, use GitHub's private
+vulnerability reporting on this repository.
 
 ## API
 
@@ -117,12 +226,17 @@ GET  /api/search?q=…&sources=printables,makerworld   → subset of sites
 GET  /api/search?q=…&sort=relevance|popular|newest
 GET  /api/search?q=…&page=2                          → next page from every site
 GET  /api/sources                                    → registry and setup state
-GET  /api/health                                     → version, header limit, sources
+GET  /api/health                                     → version, mode, setup state, sources
 GET  /api/settings                                   → editable settings, secrets masked
-PUT  /api/settings                                   → save settings (loopback only)
-POST /api/settings/test?source=thingiverse           → try a source's credentials
+PUT  /api/settings                                   → save settings (see Modes)
+POST /api/settings/test?source=thingiverse           → try a credential, saved or not
+POST /api/setup/finish                               → close the first-run window early
 GET  /img?u=<image url>                              → image proxy, allowlisted hosts
 ```
+
+Writes to `/api/settings` need an `X-Modelium-Settings: 1` header. That is the
+CSRF control: another origin cannot set a custom header without a preflight, and
+this server answers none.
 
 A result looks like this:
 
@@ -169,9 +283,16 @@ npm test
 ```
 
 Offline and fast. Covers the parts that would silently produce wrong results
-rather than an obvious crash: the ranking and deduplication maths, the
-Printables payload extraction, the MakerWorld adapter's "empty list, non-empty
-total" case, the `.env` reader and writer, and the settings validation.
+rather than an obvious crash: the ranking and deduplication maths, both search
+adapters, the MakerWorld "empty list, non-empty total" case, the `.env` reader
+and writer, and the settings validation.
+
+The security-relevant half is pinned separately, because those are the failures
+that look like nothing at all until they matter: the image proxy's per-hop
+allowlist and byte-level type detection, the settings guard's whole matrix
+(loopback, DNS rebinding, spoofed `X-Forwarded-For`, missing CSRF header), and
+the setup window's state machine, including that a wrong token of the wrong
+length is refused rather than throwing.
 
 ```bash
 npm run test:live
@@ -193,7 +314,14 @@ reason to block a merge.
 - The endpoints are unofficial. Expect to fix an adapter now and then.
 - MakerWorld sits behind a bot filter that reacts to the calling network. When
   it answers with an empty list next to a non-zero total the UI says the source
-  was blocked rather than reporting zero results.
+  was blocked rather than reporting zero results. This is also the reason not to
+  run this on a VPS: a datacentre address is what those filters are aimed at. A
+  homelab keeps a residential one.
 - Ranking is computed per page, so **Load more** appends a freshly fused page
   rather than re-ranking everything seen so far.
+- Printables is always queried by best match and sorted locally, because rank
+  fusion only works while all three lists mean the same thing by "first". Its API
+  does offer `latest`, `popular` and `rating` if that changes.
 - The cache is in memory, so restarting the server empties it.
+- Two processes sharing one config directory would race on the settings file.
+  Saves are serialized within a process; across processes they are not.

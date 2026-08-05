@@ -1,0 +1,21 @@
+# A second net under the "files" allowlist in package.json.
+#
+# Note what this file cannot do: npm gives "files" the last word, so anything
+# that allowlist pulls in — everything under server/, for one — is NOT
+# excludable from here. That is why server/.env is kept out by a `!` entry in
+# "files" itself, and why scripts/check-package.js exists to assert the result
+# rather than trust either mechanism. Shipping a live API token to the registry
+# is not an undoable mistake.
+.env
+.env.*
+!.env.example
+
+test/
+scripts/
+.github/
+.claude/
+*.log
+
+Dockerfile
+.dockerignore
+docker-compose.yml

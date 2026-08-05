@@ -1,5 +1,5 @@
 import { createReadStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 const MIME = {
@@ -34,19 +34,31 @@ export async function serveStatic(root, urlPath, response) {
 
   if (target !== root && !target.startsWith(root + path.sep)) return false;
 
+  // The prefix check above is about the path the caller asked for. This one is
+  // about where that path actually leads: a symlink inside the served directory
+  // resolves somewhere else entirely, which matters as soon as anyone mounts a
+  // directory in here rather than using the one that shipped.
+  let resolved;
+  try {
+    resolved = await realpath(target);
+  } catch {
+    return false;
+  }
+  if (resolved !== root && !resolved.startsWith(root + path.sep)) return false;
+
   let info;
   try {
-    info = await stat(target);
+    info = await stat(resolved);
   } catch {
     return false;
   }
   if (!info.isFile()) return false;
 
   response.writeHead(200, {
-    'content-type': MIME[path.extname(target).toLowerCase()] ?? 'application/octet-stream',
+    'content-type': MIME[path.extname(resolved).toLowerCase()] ?? 'application/octet-stream',
     'content-length': info.size,
     'cache-control': 'no-cache',
   });
-  createReadStream(target).pipe(response);
+  createReadStream(resolved).pipe(response);
   return true;
 }

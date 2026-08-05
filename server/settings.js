@@ -11,6 +11,10 @@
 
 import { config, refreshConfig } from './config.js';
 import { ENV_PATH, readEnvFile, updateEnvFile } from './lib/env.js';
+// The shared helper, not a local one: it carries the `expose` flag that lets the
+// HTTP layer show this message. Without it every rejected value reads as
+// "Internal error", which tells the user nothing about what they typed wrong.
+import { badRequest } from './lib/errors.js';
 import { getSource } from './sources/index.js';
 
 /**
@@ -68,12 +72,21 @@ export const FIELDS = [
 
 const BY_KEY = new Map(FIELDS.map((field) => [field.key, field]));
 
-/** What the settings panel renders. Never includes a secret's value. */
-export function describeSettings() {
+/**
+ * What the settings panel renders. Never includes a secret's value.
+ *
+ * `redact` is set in server mode, where this endpoint answers anyone who can
+ * reach the port. Two things then have to go: the absolute path of the settings
+ * file, which describes the host's filesystem, and the last four characters of
+ * the token, which are a free head start on guessing it. Both are fine to show
+ * on a loopback-only instance and neither is fine to publish.
+ */
+export function describeSettings({ redact = false } = {}) {
   const stored = readEnvFile();
 
   return {
-    file: ENV_PATH,
+    file: redact ? null : ENV_PATH,
+    readOnly: redact,
     fields: FIELDS.map((field) => {
       const { key, type } = field;
       const raw = process.env[key] ?? '';
@@ -84,7 +97,7 @@ export function describeSettings() {
         set,
         // Secrets report only a tail, enough to tell two tokens apart.
         value: type === 'secret' ? null : set ? String(raw) : currentDefault(key),
-        hint: type === 'secret' && set ? `…${String(raw).trim().slice(-4)}` : null,
+        hint: type === 'secret' && set && !redact ? `…${String(raw).trim().slice(-4)}` : null,
         // A value from the real environment cannot be overwritten by this file.
         overriddenByEnv: set && stored[key] !== raw,
       };
@@ -110,7 +123,7 @@ function currentDefault(key) {
  * @returns {{ saved: string[], restartRequired: boolean }}
  * @throws {Error & { statusCode: number }} on a rejected value
  */
-export function saveSettings(patch) {
+export async function saveSettings(patch) {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
     throw badRequest('Expected an object of settings');
   }
@@ -125,14 +138,31 @@ export function saveSettings(patch) {
 
   if (!Object.keys(writes).length) return { saved: [], restartRequired: false };
 
-  updateEnvFile(writes);
-  refreshConfig();
+  // Serialized so two overlapping saves cannot interleave their read-modify-write
+  // of the file. Within one process that is enough; two processes sharing a
+  // config directory would still need a real lock, which this does not attempt.
+  return queue(() => {
+    updateEnvFile(writes);
+    refreshConfig();
 
-  const saved = Object.keys(writes);
-  return {
-    saved,
-    restartRequired: saved.some((key) => BY_KEY.get(key)?.restart),
-  };
+    const saved = Object.keys(writes);
+    return {
+      saved,
+      restartRequired: saved.some((key) => BY_KEY.get(key)?.restart),
+    };
+  });
+}
+
+let pending = Promise.resolve();
+
+function queue(work) {
+  const run = pending.then(work, work);
+  // Keep the chain alive even when a save throws, or every later save is rejected.
+  pending = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
 }
 
 function normalize(field, raw) {
@@ -164,21 +194,20 @@ function normalize(field, raw) {
 /**
  * Try a token against the live API before the user commits to it, so a typo
  * surfaces here instead of as a failed search later.
+ *
+ * `candidate` is the value the user just typed, passed straight to the adapter
+ * rather than saved first. The panel used to save-then-test, which in server
+ * mode would have spent the single setup window on an unverified token.
  */
-export async function testSource(sourceId) {
+export async function testSource(sourceId, candidate) {
   const source = getSource(sourceId);
   if (!source) throw badRequest(`Unknown source "${sourceId}"`);
 
   try {
-    const { items } = await source.search('benchy', { limit: 1, offset: 0 });
+    const { items } = await source.search('benchy', { limit: 1, offset: 0, token: candidate });
     return { ok: true, message: `${source.label} answered with ${items.length ? 'results' : 'no results'}` };
   } catch (error) {
     return { ok: false, message: error.message, kind: error.kind ?? 'error' };
   }
 }
 
-function badRequest(message) {
-  const error = new Error(message);
-  error.statusCode = 400;
-  return error;
-}

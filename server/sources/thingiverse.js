@@ -19,8 +19,14 @@ export function isConfigured() {
   return Boolean(config.thingiverseToken);
 }
 
-export async function search(query, { limit, offset = 0, signal }) {
-  if (!isConfigured()) {
+/**
+ * `token` lets the settings panel verify a value the user just typed without
+ * saving it first. Everything else uses the configured one.
+ */
+export async function search(query, { limit, offset = 0, signal, token }) {
+  const credential = (token ?? config.thingiverseToken ?? '').trim();
+
+  if (!credential) {
     throw new MissingCredentialsError(
       'Add a Thingiverse token in Settings to include this source',
       TOKEN_DOCS,
@@ -28,7 +34,10 @@ export async function search(query, { limit, offset = 0, signal }) {
   }
 
   const perPage = Math.min(limit, 30);
-  const url = new URL(`${API}/search/${encodeURIComponent(query)}/`);
+  // The query is a path segment here, and encodeURIComponent leaves `.` alone —
+  // so a bare `..` would normalize this authenticated request onto a different
+  // endpoint. Escaping dots keeps it where it was aimed.
+  const url = new URL(`${API}/search/${encodeURIComponent(query).replaceAll('.', '%2E')}/`);
   url.searchParams.set('type', 'things');
   url.searchParams.set('sort', 'relevant');
   url.searchParams.set('per_page', String(perPage));
@@ -38,7 +47,7 @@ export async function search(query, { limit, offset = 0, signal }) {
   try {
     payload = await requestJson(url.toString(), {
       signal,
-      headers: { authorization: `Bearer ${config.thingiverseToken}` },
+      headers: { authorization: `Bearer ${credential}` },
     });
   } catch (error) {
     // A rejected token is a setup problem, not an outage — say so, and point at

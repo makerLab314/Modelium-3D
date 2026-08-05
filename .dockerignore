@@ -1,0 +1,19 @@
+# server/.env must never reach an image: it holds a live API token, and an image
+# layer keeps it even if a later layer deletes the file.
+server/.env
+server/.env.*
+!server/.env.example
+.env
+.env.*
+
+.git
+.github
+.claude
+node_modules
+test
+scripts
+*.log
+
+Dockerfile
+.dockerignore
+docker-compose.yml

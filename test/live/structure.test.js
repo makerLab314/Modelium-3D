@@ -62,10 +62,10 @@ function assertSomeStats(items, keys, source) {
   }
 }
 
-test('Printables still inlines its GraphQL payload in the search page', async () => {
+test('Printables still answers searchPrints2 with the fields the adapter reads', async () => {
   const { items, total } = await printables.search(QUERY, { limit: 12 });
 
-  assert.ok(items.length > 0, 'Printables returned no items — page layout or endpoint changed');
+  assert.ok(items.length > 0, 'Printables returned no items — schema or endpoint changed');
   assert.equal(typeof total, 'number');
 
   items.forEach((item) => assertShape(item, 'printables'));
@@ -74,6 +74,36 @@ test('Printables still inlines its GraphQL payload in the search page', async ()
     'Printables model URLs no longer match the expected pattern',
   );
   assertSomeStats(items, ['likes', 'downloads'], 'printables');
+});
+
+/**
+ * Introspection is disabled, so a renamed field is not a warning — it is a hard
+ * error on the whole query. `club` already became `premium` once; this is the
+ * check that turns the next rename into a red build instead of a silent wrong
+ * answer, and it fails loudly because `readResult` refuses a payload carrying
+ * `errors`.
+ */
+test('Printables still accepts every field the query asks for', async () => {
+  const { items } = await printables.search(QUERY, { limit: 3 });
+
+  assert.ok(
+    items.every((item) => typeof item.paid === 'boolean'),
+    'the paid flag lost its backing fields (price / premium)',
+  );
+});
+
+test('Printables paginates by offset', async () => {
+  const first = await printables.search(QUERY, { limit: 6, offset: 0 });
+  const second = await printables.search(QUERY, { limit: 6, offset: 6 });
+
+  assert.ok(second.items.length > 0, 'Printables returned nothing for the second page');
+
+  const firstIds = new Set(first.items.map((item) => item.sourceId));
+  const overlap = second.items.filter((item) => firstIds.has(item.sourceId));
+  assert.ok(
+    overlap.length < second.items.length,
+    'Printables ignored offset — every second-page hit repeated the first page',
+  );
 });
 
 test('MakerWorld still answers on select/design2 with a populated hit list', async () => {

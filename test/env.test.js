@@ -115,3 +115,37 @@ test('values needing quotes round trip through a write and read', () => {
   assert.equal(readEnvFile(file).USER_AGENT, 'Mozilla/5.0 (Windows NT 10.0) "quoted"');
   delete process.env.USER_AGENT;
 });
+
+/**
+ * The file holds an API token, and `writeFileSync`'s `mode` is only honoured
+ * when it creates the file. A `.env` copied from `.env.example` would otherwise
+ * keep whatever permissions it arrived with.
+ */
+test('writing tightens the permissions of a file that already existed', { skip: process.platform === 'win32' && 'POSIX mode bits only' }, () => {
+  const file = tempFile('A=1\n');
+  fs.chmodSync(file, 0o644);
+
+  updateEnvFile({ THINGIVERSE_TOKEN: 'secret' }, file);
+
+  assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+  delete process.env.THINGIVERSE_TOKEN;
+});
+
+test('a write leaves no temporary file behind', () => {
+  const file = tempFile('A=1\n');
+  updateEnvFile({ PORT: '9000' }, file);
+
+  const stray = fs.readdirSync(path.dirname(file)).filter((name) => name.includes('.tmp-'));
+  assert.deepEqual(stray, [], 'the temporary file should have been renamed away');
+  delete process.env.PORT;
+});
+
+test('a failing write leaves the previous contents intact', () => {
+  const file = tempFile('THINGIVERSE_TOKEN=original\n');
+  // A directory where the temporary file wants to go makes the write fail
+  // after the original is already on disk — the case truncate-in-place lost.
+  fs.mkdirSync(`${file}.tmp-${process.pid}`);
+
+  assert.throws(() => updateEnvFile({ THINGIVERSE_TOKEN: 'replacement' }, file));
+  assert.equal(fs.readFileSync(file, 'utf8'), 'THINGIVERSE_TOKEN=original\n');
+});

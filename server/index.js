@@ -1,223 +1,66 @@
-import http from 'node:http';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { config } from './config.js';
-import { headerLimitOk, REQUIRED_HEADER_SIZE } from './lib/http.js';
-import { proxyUrl, serveImage } from './lib/imageProxy.js';
-import { serveStatic } from './lib/static.js';
-import { describeSettings, saveSettings, testSource } from './settings.js';
+import { createApp } from './app.js';
+import { ENV_PATH } from './lib/env.js';
+import { createSetupWindow, STATES } from './lib/setupWindow.js';
 import { describeSources } from './sources/index.js';
-import { merge, resolveSources, searchSource, SORT_MODES } from './search.js';
 
-const PUBLIC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
+/**
+ * Refuse to run `local` mode on a non-loopback address.
+ *
+ * In `local` mode the settings panel may rewrite the token file because the
+ * request provably came from this machine. That proof rests on the socket's peer
+ * address — which a reverse proxy on the same host makes `127.0.0.1` for every
+ * caller on earth. No heuristic recovers from that, so instead of guarding the
+ * situation we make it unreachable: binding wider than loopback requires saying
+ * `MODELIUM_MODE=server`, where settings are read-only to begin with.
+ *
+ * Fronting a loopback-bound server with nginx is the same hazard by another
+ * route, which is why the message names it.
+ */
+function assertBindIsSafe() {
+  if (config.mode === 'server') return;
 
-const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host ?? 'localhost'}`);
+  const loopback = ['127.0.0.1', '::1', 'localhost'];
+  if (loopback.includes(config.host)) return;
 
-  try {
-    if (url.pathname === '/api/health') return sendJson(res, 200, health());
-    if (url.pathname === '/api/sources') return sendJson(res, 200, { sources: describeSources() });
-    if (url.pathname === '/api/search') return await handleSearch(url, req, res);
-    if (url.pathname === '/api/settings') return await handleSettings(req, res);
-    if (url.pathname === '/api/settings/test') return await handleSettingsTest(url, req, res);
-    if (url.pathname === '/img') return await serveImage(url.searchParams.get('u') ?? '', res);
+  console.error(
+    `\n  Refusing to start.\n\n` +
+      `  HOST is ${config.host}, but the mode is "local", which lets the settings\n` +
+      `  panel write the file holding your API token and trusts the connection's\n` +
+      `  own address to decide who may do that. That check cannot survive being\n` +
+      `  reachable from elsewhere — and it cannot survive a reverse proxy either,\n` +
+      `  which makes every request look like it came from this machine.\n\n` +
+      `  To share this server, run it in server mode:\n\n` +
+      `      MODELIUM_MODE=server HOST=${config.host} npm start\n\n` +
+      `  Settings are then read-only, configured with environment variables, with\n` +
+      `  one setup window on first run.\n`,
+  );
+  process.exit(1);
+}
 
-    if (req.method === 'GET' || req.method === 'HEAD') {
-      if (await serveStatic(PUBLIC_DIR, url.pathname, res)) return;
-    }
+assertBindIsSafe();
 
-    sendJson(res, 404, { error: 'Not found' });
-  } catch (error) {
-    if (res.headersSent) return res.end();
-    sendJson(res, error.statusCode ?? 500, { error: error.message });
-  }
+const setup = createSetupWindow({
+  mode: config.mode,
+  enabled: config.setupEnabled,
+  windowMs: config.setupWindowMs,
+  envPath: ENV_PATH,
 });
 
-/**
- * One endpoint, two shapes. `stream=1` opens a Server Sent Events channel so
- * every site's hits land on screen the moment that site answers, instead of
- * everyone waiting for the slowest one. Without it you get a plain JSON body,
- * which is the friendlier shape for scripts and tests.
- */
-async function handleSearch(url, req, res) {
-  const query = (url.searchParams.get('q') ?? '').trim();
-  if (!query) return sendJson(res, 400, { error: 'Missing query parameter q' });
-
-  const sort = SORT_MODES.includes(url.searchParams.get('sort') ?? '')
-    ? url.searchParams.get('sort')
-    : 'relevance';
-  const selected = resolveSources((url.searchParams.get('sources') ?? '').split(',').filter(Boolean));
-  const page = clampPage(url.searchParams.get('page'));
-
-  const controller = new AbortController();
-  req.on('close', () => controller.abort());
-
-  const startedAt = Date.now();
-  const streaming = url.searchParams.get('stream') === '1';
-  const reports = [];
-
-  const runs = selected.map(async (sourceId) => {
-    const report = await searchSource(sourceId, query, { signal: controller.signal, page });
-    reports.push(report);
-    return report;
-  });
-
-  if (!streaming) {
-    await Promise.all(runs);
-    return sendJson(res, 200, {
-      query,
-      tookMs: Date.now() - startedAt,
-      ...withProxiedImages(merge(reports, query, sort, page)),
-    });
-  }
-
-  res.writeHead(200, {
-    'content-type': 'text/event-stream; charset=utf-8',
-    'cache-control': 'no-cache, no-transform',
-    connection: 'keep-alive',
-    'x-accel-buffering': 'no',
-  });
-
-  send(res, 'start', { query, sort, page, sources: selected });
-
-  // Emit in completion order, not registry order, so one slow site cannot hold
-  // back the results of a fast one.
-  await Promise.all(
-    runs.map((run) =>
-      run.then((report) => {
-        if (res.writableEnded) return;
-        send(res, 'source', { ...report, items: undefined, count: report.items.length });
-        send(res, 'results', withProxiedImages(merge(reports, query, sort, page)));
-      }),
-    ),
-  );
-
-  if (res.writableEnded) return;
-  send(res, 'done', { tookMs: Date.now() - startedAt });
-  res.end();
-}
-
-async function handleSettings(req, res) {
-  requireLocalRequest(req);
-
-  if (req.method === 'GET') return sendJson(res, 200, describeSettings());
-
-  if (req.method === 'PUT' || req.method === 'POST') {
-    const result = saveSettings(await readJsonBody(req));
-    return sendJson(res, 200, { ...result, ...describeSettings() });
-  }
-
-  return sendJson(res, 405, { error: 'Use GET or PUT' });
-}
-
-async function handleSettingsTest(url, req, res) {
-  if (req.method !== 'POST') return sendJson(res, 405, { error: 'Use POST' });
-  requireLocalRequest(req);
-  return sendJson(res, 200, await testSource(url.searchParams.get('source') ?? ''));
-}
+const server = createApp({ setupWindow: setup });
 
 /**
- * The settings surface reads and writes a file containing an API token, so both
- * halves are restricted to requests that actually came from this machine. The
- * Host check is what stops a page on the open web from pointing a DNS name at
- * 127.0.0.1 and talking to us; `sec-fetch-site` is a second, browser-enforced
- * belt against a cross-site request.
+ * Slowloris budgets. `requestTimeout` bounds how long a *request* may take to
+ * arrive, not how long a response may stream, so a long-lived SSE search is
+ * unaffected.
+ *
+ * There is deliberately no `maxConnections`: it drops connections at the TCP
+ * layer with no answer at all, and a grid of proxied thumbnails routinely opens
+ * six per browser. The rate limiter is the control that belongs here.
  */
-function requireLocalRequest(req) {
-  const address = req.socket.remoteAddress ?? '';
-  const isLoopback =
-    address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
-
-  const host = (req.headers.host ?? '').split(':')[0].toLowerCase();
-  const localHostname = host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
-
-  const site = req.headers['sec-fetch-site'];
-  const sameOrigin = site === undefined || site === 'same-origin' || site === 'none';
-
-  if (!isLoopback || !localHostname || !sameOrigin) {
-    throw forbidden('Settings are only available from this machine');
-  }
-}
-
-async function readJsonBody(req, limitBytes = 64 * 1024) {
-  const chunks = [];
-  let size = 0;
-
-  for await (const chunk of req) {
-    size += chunk.length;
-    if (size > limitBytes) throw badRequest('Request body too large');
-    chunks.push(chunk);
-  }
-
-  const text = Buffer.concat(chunks).toString('utf8').trim();
-  if (!text) return {};
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw badRequest('Body must be JSON');
-  }
-}
-
-/** Everything the UI needs to tell the user why a search might not work. */
-function health() {
-  return {
-    ok: true,
-    version: '0.2.0',
-    node: process.version,
-    headerLimitOk: headerLimitOk(),
-    headerLimitNeeded: REQUIRED_HEADER_SIZE,
-    headerLimit: http.maxHeaderSize,
-    sources: describeSources(),
-  };
-}
-
-/** Rewrite image URLs to the local proxy so the browser never calls the CDNs. */
-function withProxiedImages(payload) {
-  if (!config.proxyImages) return payload;
-
-  return {
-    ...payload,
-    results: payload.results.map((item) =>
-      item.image
-        ? { ...item, image: { thumb: proxyUrl(item.image.thumb), full: item.image.full } }
-        : item,
-    ),
-  };
-}
-
-function clampPage(raw) {
-  const page = Number.parseInt(raw ?? '1', 10);
-  return Number.isFinite(page) && page > 0 ? Math.min(page, 20) : 1;
-}
-
-function send(res, event, data) {
-  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-}
-
-function sendJson(res, status, payload) {
-  const body = JSON.stringify(payload);
-  res.writeHead(status, {
-    'content-type': 'application/json; charset=utf-8',
-    'content-length': Buffer.byteLength(body),
-  });
-  res.end(body);
-}
-
-function badRequest(message) {
-  const error = new Error(message);
-  error.statusCode = 400;
-  return error;
-}
-
-function forbidden(message) {
-  const error = new Error(message);
-  error.statusCode = 403;
-  return error;
-}
-
-/* --- Lifecycle ----------------------------------------------------------- */
+server.requestTimeout = 30_000;
+server.headersTimeout = 15_000;
+server.keepAliveTimeout = 10_000;
 
 server.on('error', (error) => {
   if (error.code === 'EADDRINUSE') {
@@ -235,15 +78,10 @@ server.on('error', (error) => {
 });
 
 server.listen(config.port, config.host, () => {
-  console.log(`\n  Modelium 3D  ·  http://${config.host}:${config.port}\n`);
+  const shown = config.host === '0.0.0.0' ? 'localhost' : config.host;
+  console.log(`\n  Modelium 3D  ·  http://${shown}:${config.port}  ·  ${config.mode} mode\n`);
 
-  if (!headerLimitOk()) {
-    console.warn(
-      `  ! Node's HTTP header limit is ${Math.round(http.maxHeaderSize / 1024)} KB. Printables sends larger\n` +
-        `    headers than that and will fail. Start with \`npm start\`, which passes\n` +
-        `    --max-http-header-size=${REQUIRED_HEADER_SIZE}.\n`,
-    );
-  }
+  announceSetup();
 
   const missing = describeSources().filter((source) => !source.configured);
   if (missing.length) {
@@ -252,6 +90,35 @@ server.listen(config.port, config.host, () => {
     );
   }
 });
+
+/**
+ * The one place the claim token is ever shown. It is not written to the settings
+ * file, never returned by an endpoint and never logged again, so whoever can
+ * read this output is the one who can configure the instance.
+ */
+function announceSetup() {
+  if (config.mode !== 'server') return;
+
+  const token = setup.claimToken();
+  if (token) {
+    const minutes = Math.round(config.setupWindowMs / 60_000);
+    console.log(
+      `  First run. Settings can be saved once, within ${minutes} minutes, using:\n\n` +
+        `      ${token}\n\n` +
+        `  Open the app, click Settings and paste it there. The window closes for\n` +
+        `  good after the first successful save.\n`,
+    );
+    return;
+  }
+
+  const reason = {
+    [STATES.SEALED]: 'already configured',
+    [STATES.DISABLED]: 'disabled or no writable config directory',
+    [STATES.EXPIRED]: 'window expired',
+  }[setup.state];
+
+  console.log(`  Settings are read-only (${reason}). Configure with environment variables.\n`);
+}
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {

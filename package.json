@@ -1,17 +1,50 @@
 {
   "name": "modelium-3d",
-  "version": "0.2.0",
-  "private": true,
+  "version": "0.3.0",
   "type": "module",
   "description": "One search box for Printables, Thingiverse and MakerWorld.",
+  "keywords": [
+    "3d-printing",
+    "printables",
+    "thingiverse",
+    "makerworld",
+    "search",
+    "self-hosted"
+  ],
+  "license": "GPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/makerLab314/Modelium-3D.git"
+  },
+  "bugs": {
+    "url": "https://github.com/makerLab314/Modelium-3D/issues"
+  },
+  "homepage": "https://github.com/makerLab314/Modelium-3D#readme",
+  "bin": {
+    "modelium-3d": "bin/modelium.js"
+  },
+  "files": [
+    "bin/",
+    "server/",
+    "public/",
+    "README.md",
+    "LICENSE",
+    "!server/.env",
+    "!server/.env.*",
+    "server/.env.example"
+  ],
   "scripts": {
-    "start": "node --max-http-header-size=65536 server/index.js",
-    "dev": "node --max-http-header-size=65536 --watch server/index.js",
-    "test": "node --max-http-header-size=65536 --test \"test/**/*.test.js\"",
-    "test:live": "node --max-http-header-size=65536 --test \"test/live/**/*.test.js\""
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test \"test/*.test.js\"",
+    "test:live": "node --test \"test/live/*.test.js\"",
+    "pack:check": "node scripts/check-package.js",
+    "docker:build": "docker build -t modelium-3d ."
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.11.0"
   },
-  "license": "GPL-3.0"
+  "publishConfig": {
+    "access": "public"
+  }
 }

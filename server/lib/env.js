@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -14,10 +15,38 @@ import { fileURLToPath } from 'node:url';
 
 const SERVER_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-/** Canonical location. Overridable so the tests can point somewhere disposable. */
-export const ENV_PATH = process.env.MODELIUM_ENV_FILE
-  ? path.resolve(process.env.MODELIUM_ENV_FILE)
-  : path.join(SERVER_DIR, '.env');
+/**
+ * Where the settings file lives, in order of precedence:
+ *
+ *   1. MODELIUM_ENV_FILE   — an explicit file. The tests use this.
+ *   2. MODELIUM_CONFIG_DIR — a directory; the Docker image points it at /data.
+ *   3. server/.env         — a git checkout, which is where it has always been.
+ *   4. the OS config dir   — an installed copy.
+ *
+ * Steps 3 and 4 are the packaging half. Installed through npm the code sits in
+ * `node_modules/modelium-3d/`, which npm replaces wholesale on every upgrade and
+ * which may not even be writable — a token saved there would quietly vanish. So
+ * an installed copy keeps its configuration in the user's own config directory,
+ * while a checkout keeps the behaviour it has today.
+ */
+function defaultEnvPath() {
+  if (process.env.MODELIUM_ENV_FILE) return path.resolve(process.env.MODELIUM_ENV_FILE);
+  if (process.env.MODELIUM_CONFIG_DIR) {
+    return path.join(path.resolve(process.env.MODELIUM_CONFIG_DIR), '.env');
+  }
+
+  const installed = SERVER_DIR.split(path.sep).includes('node_modules');
+  if (!installed) return path.join(SERVER_DIR, '.env');
+
+  const base =
+    process.platform === 'win32'
+      ? process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming')
+      : process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
+
+  return path.join(base, 'modelium-3d', '.env');
+}
+
+export const ENV_PATH = defaultEnvPath();
 
 const LINE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/;
 
@@ -124,8 +153,7 @@ export function updateEnvFile(values, file = ENV_PATH) {
   // end the file with one.
   const body = `${next.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '').trimEnd()}\n`;
 
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, body, { encoding: 'utf8', mode: 0o600 });
+  writeAtomic(file, body);
 
   for (const [key, value] of Object.entries(values)) {
     if (isBlank(value)) delete process.env[key];
@@ -133,6 +161,47 @@ export function updateEnvFile(values, file = ENV_PATH) {
   }
 
   return body;
+}
+
+/**
+ * Write through a temporary file and rename over the target.
+ *
+ * The file holds an API token, so the two things that can go wrong both matter:
+ * a crash or a full disk mid-write would otherwise leave a truncated `.env` and
+ * lose the token, and `writeFileSync`'s `mode` is only honoured when it creates
+ * the file — a `.env` copied from `.env.example` would silently keep 0644.
+ * Renaming a fresh 0600 file over the old one fixes both at once.
+ *
+ * No locking is needed: this function is synchronous from end to end, so two
+ * concurrent requests cannot interleave inside it.
+ */
+function writeAtomic(file, body) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+
+  const temporary = `${file}.tmp-${process.pid}`;
+  let handle;
+
+  try {
+    handle = fs.openSync(temporary, 'w', 0o600);
+    fs.writeFileSync(handle, body, 'utf8');
+    fs.fsyncSync(handle);
+  } finally {
+    if (handle !== undefined) fs.closeSync(handle);
+  }
+
+  try {
+    // A no-op on Windows, which has no POSIX mode bits. Harmless there.
+    fs.chmodSync(temporary, 0o600);
+    fs.renameSync(temporary, file);
+  } catch (error) {
+    try {
+      fs.unlinkSync(temporary);
+    } catch {
+      // The rename already consumed it, or the directory went away. Either way
+      // the original error below is the one worth reporting.
+    }
+    throw error;
+  }
 }
 
 function readFileOrEmpty(file) {

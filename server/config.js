@@ -24,9 +24,24 @@ const bool = (value, fallback) => {
 export const config = {};
 
 export function refreshConfig() {
+  /**
+   * `local` is a single-user app on one machine; `server` is a shared instance
+   * that may sit behind a reverse proxy. The difference is not cosmetic: in
+   * `local` the settings panel may rewrite the token file because the request
+   * provably came from this machine, and in `server` no such proof exists — a
+   * proxy makes every request look local — so the file is read-only except
+   * during the one-time setup window.
+   */
+  const mode = process.env.MODELIUM_MODE === 'server' ? 'server' : 'local';
+
   Object.assign(config, {
-    host: process.env.HOST || '127.0.0.1',
+    mode,
+    host: process.env.HOST || (mode === 'server' ? '0.0.0.0' : '127.0.0.1'),
     port: int(process.env.PORT, 8787),
+
+    /** How long the first-run window accepts a save. Only meaningful in server mode. */
+    setupWindowMs: clamp(int(process.env.MODELIUM_SETUP_WINDOW_MS, 15 * 60 * 1000), 60_000, 3_600_000),
+    setupEnabled: bool(process.env.MODELIUM_SETUP, true),
 
     /** Hard ceiling per source, per page, before merging. */
     perSourceLimit: clamp(int(process.env.PER_SOURCE_LIMIT, 36), 1, 100),

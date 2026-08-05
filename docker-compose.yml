@@ -1,0 +1,43 @@
+services:
+  modelium:
+    build: .
+    image: ghcr.io/makerlab314/modelium-3d:latest
+    container_name: modelium
+
+    # Bound to loopback by default. Widen it to "8787:8787" once you have decided
+    # who should reach this — there is no login, so on a flat home network that
+    # means everyone on it. Behind a reverse proxy, keep this line as it is and
+    # let the proxy be the only thing that talks to the container.
+    ports:
+      - "127.0.0.1:8787:8787"
+
+    environment:
+      # Read the setup token out of `docker logs modelium` on the first run, then
+      # paste it into the Settings panel once. Or skip that entirely and set the
+      # token here:
+      # THINGIVERSE_TOKEN: "..."
+      #
+      # Set this once configured, so the window cannot reopen if the marker file
+      # is ever lost:
+      # MODELIUM_SETUP: "false"
+      TZ: UTC
+
+    volumes:
+      # Holds .env and the setup marker. A named volume is owned correctly out of
+      # the box; a bind mount needs `chown -R 1000:1000` first.
+      - modelium-data:/data
+
+    restart: unless-stopped
+    init: true
+
+    # Nothing writes outside /data, so the rest of the filesystem can be sealed.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  modelium-data:

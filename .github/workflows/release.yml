@@ -1,0 +1,71 @@
+name: Release
+
+# Tag driven: `git tag v0.3.0 && git push --tags`.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to build a release for
+        required: true
+
+# Deliberately no npm publish step and no NPM_TOKEN. Publishing stays a manual
+# `npm publish` so the first release cannot happen by accident.
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    name: Tarball and image
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm test
+
+      # Must pass before anything is published anywhere: it is what stands
+      # between a live API token and the internet.
+      - run: npm run pack:check
+
+      - name: Check the tag matches package.json
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version=$(node -p "require('./package.json').version")
+          test "$tag" = "$version" \
+            || { echo "::error::tag $tag does not match package.json version $version"; exit 1; }
+
+      - name: Build the tarball
+        id: pack
+        run: echo "file=$(npm pack | tail -1)" >> "$GITHUB_OUTPUT"
+
+      # This is the .git-free download: source without history, tests or CI.
+      - name: Attach it to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.pack.outputs.file }}
+          generate_release_notes: true
+
+      - name: Log in to the container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/modelium-3d:${{ github.ref_name }}
+            ghcr.io/${{ github.repository_owner }}/modelium-3d:latest

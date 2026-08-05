@@ -1,7 +1,7 @@
 /**
- * A trimmed copy of what printables.com/search/models returns: a SvelteKit
- * page with several inlined GraphQL responses, only one of which is the model
- * list. Field names and nesting match the real payload.
+ * A trimmed copy of what api.printables.com/graphql/ returns for a search.
+ * Field names and nesting match the real payload, including the aliased
+ * `result` the query asks for.
  */
 
 const model = (id, name, overrides = {}) => ({
@@ -13,31 +13,30 @@ const model = (id, name, overrides = {}) => ({
   downloadCount: 3400,
   datePublished: '2024-02-01T10:00:00+00:00',
   firstPublish: '2023-11-05T09:00:00+00:00',
-  image: { filePath: `media/prints/${id}/images/abc/photo.jpg`, __typename: 'PrintImageType' },
   nsfw: false,
-  user: { handle: 'maker', publicUsername: 'A Maker', __typename: 'UserType' },
-  __typename: 'PrintType',
+  price: null,
+  premium: false,
+  image: { filePath: `media/prints/${id}/images/abc/photo.jpg` },
+  user: { handle: 'maker', publicUsername: 'A Maker' },
   ...overrides,
 });
-
-const blob = (payload) =>
-  `<script type="application/json" data-sveltekit-fetched data-url="https://api.printables.com/graphql/" data-hash="x">${JSON.stringify(
-    { status: 200, statusText: '', headers: {}, body: JSON.stringify(payload) },
-  )}</script>`;
 
 export const models = [
   model('3161', 'Voronoi Lamp'),
   model('4200', 'Cable Clip', { nsfw: true }),
   model('9001', 'Bracket', { image: null, user: { handle: '', publicUsername: '' } }),
+  model('9002', 'Paid Thing', { premium: true }),
 ];
 
-export const html = [
-  '<!doctype html><html><body>',
-  // Not a model list: must be ignored.
-  blob({ data: { result: { categories: [{ id: '1' }], totalCount: 4, __typename: 'X' } } }),
-  // A shorter model list, as the page carries for related sections.
-  blob({ data: { result: { items: [model('55', 'Side Result')], totalCount: 1, __typename: 'PrintList' } } }),
-  // The real search result list.
-  blob({ data: { result: { items: models, totalCount: 3709, __typename: 'PrintList' } } }),
-  '</body></html>',
-].join('\n');
+export const response = {
+  data: { result: { totalCount: 3709, items: models } },
+};
+
+export const emptyResponse = {
+  data: { result: { totalCount: 0, items: [] } },
+};
+
+/** What the API answers when a field the adapter asks for no longer exists. */
+export const errorResponse = {
+  errors: [{ message: "Cannot query field 'club' on type 'PrintType'." }],
+};

@@ -21,7 +21,7 @@ export async function searchSource(sourceId, query, { signal, page = 1 } = {}) {
   const limit = config.perSourceLimit;
   const cacheKey = `${sourceId}::${query.toLowerCase()}::${page}::${limit}`;
   const cached = cache.get(cacheKey);
-  if (cached) return { ...cached, cached: true };
+  if (cached) return visible({ ...cached, cached: true });
 
   const startedAt = Date.now();
 
@@ -32,8 +32,7 @@ export async function searchSource(sourceId, query, { signal, page = 1 } = {}) {
       signal,
     });
 
-    const visible = config.hideNsfw ? items.filter((item) => !item.nsfw) : items;
-    const decorated = visible.map((item) => ({
+    const decorated = items.map((item) => ({
       ...item,
       id: `${source.id}:${item.sourceId}`,
       source: source.id,
@@ -46,7 +45,8 @@ export async function searchSource(sourceId, query, { signal, page = 1 } = {}) {
       tookMs: Date.now() - startedAt,
     });
 
-    return cache.set(cacheKey, result);
+    cache.set(cacheKey, result);
+    return visible(result);
   } catch (error) {
     const known = error instanceof SourceError;
     return report(source.id, source.label, known ? error.kind : 'error', {
@@ -55,6 +55,19 @@ export async function searchSource(sourceId, query, { signal, page = 1 } = {}) {
       tookMs: Date.now() - startedAt,
     });
   }
+}
+
+/**
+ * Apply the NSFW setting on the way out rather than on the way in.
+ *
+ * The cache holds what the site returned, unfiltered, because hiding is a
+ * presentation choice and not a property of the fetch. Filtering before caching
+ * meant the key described a different setting than the value — so turning the
+ * option on kept serving unfiltered results until the entry expired.
+ */
+function visible(result) {
+  if (!config.hideNsfw || !result.items?.length) return result;
+  return { ...result, items: result.items.filter((item) => !item.nsfw) };
 }
 
 /** Fuse a set of per source reports into the final result list. */

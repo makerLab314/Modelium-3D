@@ -8,6 +8,7 @@
  */
 
 import { createSettings } from "./settings.js";
+import { NAVIGABLE, safeUrl } from "./url.js";
 
 const el = {
   form: document.querySelector("[data-search-form]"),
@@ -171,27 +172,13 @@ function setPlate(sourceId, status, count) {
 }
 
 /**
- * Two things can be wrong before a single search runs: the process is missing
- * the HTTP header limit Printables needs, or a source has no token. The first
- * is not dismissible because nothing the user does in the page can fix it.
+ * One thing can be wrong before a single search runs: a source has no token.
+ * Searching still works, so this is dismissible.
  */
 function renderSetup() {
   const unconfigured = state.sources.filter((source) => !source.configured);
-  const headerBroken = state.health && state.health.headerLimitOk === false;
 
   el.settingsBadge.hidden = !unconfigured.length;
-
-  if (headerBroken) {
-    el.setup.hidden = false;
-    el.setup.dataset.tone = "warn";
-    el.setupTitle.textContent = "The server needs to be restarted properly";
-    el.setupText.textContent =
-      `Node is running with a ${Math.round(state.health.headerLimit / 1024)} KB HTTP header limit. ` +
-      "Printables sends larger headers and will fail. Stop the server and start it with `npm start`.";
-    el.setupDismiss.hidden = true;
-    return;
-  }
-
   el.setupDismiss.hidden = false;
 
   if (!unconfigured.length || localStorage.getItem(SETUP_KEY) === "1") {
@@ -595,7 +582,18 @@ function syncThemeLabel() {
 function element(tag, attributes = {}, text) {
   const node = document.createElement(tag);
   for (const [key, value] of Object.entries(attributes)) {
-    if (value !== undefined && value !== null) node.setAttribute(key, value);
+    if (value === undefined || value === null) continue;
+
+    // Anything the browser would navigate to is checked here rather than at each
+    // call site, because the URLs come from three remote APIs and only one of
+    // them is built by us.
+    if (NAVIGABLE.has(key)) {
+      const safe = safeUrl(value);
+      if (safe) node.setAttribute(key, safe);
+      continue;
+    }
+
+    node.setAttribute(key, value);
   }
   if (text !== undefined) node.textContent = text;
   return node;

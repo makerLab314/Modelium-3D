@@ -10,12 +10,8 @@
     />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="styles.css" />
-    <script>
-      // Set the scheme before first paint so the page never flashes the wrong one.
-      const stored = localStorage.getItem("modelium.theme");
-      const preferred = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-      document.documentElement.dataset.theme = stored || preferred;
-    </script>
+    <!-- Blocking on purpose: it has to run before first paint. -->
+    <script src="theme.js"></script>
   </head>
   <body>
     <a class="skip-link" href="#results">Skip to results</a>

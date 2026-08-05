@@ -1,4 +1,4 @@
-import { requestText } from '../lib/http.js';
+import { requestJson } from '../lib/http.js';
 import { SourceError } from '../lib/errors.js';
 
 export const id = 'printables';
@@ -8,65 +8,106 @@ export const homepage = 'https://www.printables.com';
 const MEDIA_HOST = 'https://media.printables.com/';
 
 /**
- * Printables has no documented public search API and its GraphQL endpoint has
- * introspection disabled. The search page is server rendered by SvelteKit
- * though, and SvelteKit inlines every response it fetched during SSR into
- * <script type="application/json" data-sveltekit-fetched> tags. So instead of
- * scraping markup we lift the original GraphQL payload back out of the page,
- * which gives us clean structured data and survives CSS changes.
+ * Printables has no documented public API, but the one its own frontend talks to
+ * accepts plain queries: no key, no persisted-query allowlist. Introspection is
+ * disabled, which only means the schema has to be read out of the site's own
+ * bundles rather than asked for.
+ *
+ * This replaced an earlier approach that lifted the payload back out of the
+ * server rendered search page. Same data, but that page answers with a ~18 KB
+ * `Link` header of preload hints, which is over Node's default limit and forced
+ * the whole process to run with --max-http-header-size. The API sends ~600
+ * bytes of headers and a fortieth of the body.
  */
-const FETCHED_BLOB = /<script[^>]*data-sveltekit-fetched[^>]*>([\s\S]*?)<\/script>/g;
+const ENDPOINT = 'https://api.printables.com/graphql/';
 
-export function extractModels(html) {
-  let best = null;
-  let sawResultList = false;
-
-  for (const match of html.matchAll(FETCHED_BLOB)) {
-    let payload;
-    try {
-      payload = JSON.parse(decodeBlob(match[1]));
-    } catch {
-      continue;
-    }
-
-    const body = typeof payload?.body === 'string' ? safeParse(payload.body) : payload?.body;
-    const result = body?.data?.result;
-    if (!Array.isArray(result?.items)) continue;
-
-    // A page with zero hits still ships the empty envelope, which is how we
-    // tell "nothing matched" apart from "the page layout changed".
-    sawResultList = true;
-    const items = result.items;
-    if (!items.length || items[0]?.__typename !== 'PrintType') continue;
-
-    // A search page carries several result blobs (models, collections, users).
-    // The model list is by far the longest one.
-    if (!best || items.length > best.items.length) {
-      best = { items, totalCount: result.totalCount ?? items.length };
+/**
+ * `ordering` is a SearchChoicesEnum and accepts exactly: best_match, latest,
+ * popular, rating. We always ask for best_match and sort locally, because the
+ * merge fuses three sites by rank (see lib/rank.js) and that only works while
+ * every list is ordered by the same idea of relevance.
+ */
+const SEARCH_QUERY = `query SearchModels($query: String!, $limit: Int, $offset: Int) {
+  result: searchPrints2(
+    query: $query
+    printType: print
+    limit: $limit
+    offset: $offset
+    ordering: best_match
+  ) {
+    totalCount
+    items {
+      id
+      name
+      slug
+      ratingAvg
+      likesCount
+      downloadCount
+      datePublished
+      firstPublish
+      nsfw
+      price
+      premium
+      image {
+        filePath
+      }
+      user {
+        handle
+        publicUsername
+      }
     }
   }
+}`;
 
-  if (best) return best;
-  return sawResultList ? { items: [], totalCount: 0 } : null;
+/**
+ * Pull the result list out of a GraphQL response, or explain why there is none.
+ * Exported for the tests: this is the part that goes quiet rather than loud when
+ * the schema drifts.
+ *
+ * @returns {{ items: unknown[], totalCount: number }}
+ */
+export function readResult(payload) {
+  if (Array.isArray(payload?.errors) && payload.errors.length) {
+    const detail = payload.errors
+      .map((error) => error?.message)
+      .filter(Boolean)
+      .join('; ');
+    throw new SourceError(
+      detail ? `Printables rejected the query: ${detail}` : 'Printables rejected the query',
+      'unavailable',
+    );
+  }
+
+  const result = payload?.data?.result;
+  if (!result || !Array.isArray(result.items)) {
+    throw new SourceError('Unexpected answer from the Printables API', 'unavailable');
+  }
+
+  // An empty list with a zero total is a real "nothing matched", not a break.
+  return { items: result.items, totalCount: result.totalCount ?? result.items.length };
 }
 
 export async function search(query, { limit, offset = 0, signal }) {
-  const url = new URL('https://www.printables.com/search/models');
-  url.searchParams.set('q', query);
-  url.searchParams.set('ordering', 'best_match');
-  if (offset > 0) url.searchParams.set('page', String(Math.floor(offset / limit) + 1));
-
-  const html = await requestText(url.toString(), {
+  const payload = await requestJson(ENDPOINT, {
+    method: 'POST',
     signal,
-    headers: { accept: 'text/html,application/xhtml+xml' },
+    headers: {
+      'content-type': 'application/json',
+      origin: homepage,
+      referer: `${homepage}/`,
+    },
+    body: JSON.stringify({
+      operationName: 'SearchModels',
+      query: SEARCH_QUERY,
+      variables: { query, limit: Math.min(limit, 100), offset },
+    }),
   });
 
-  const found = extractModels(html);
-  if (!found) throw new SourceError('Could not read the search page layout', 'unavailable');
+  const { items, totalCount } = readResult(payload);
 
   return {
-    total: found.totalCount,
-    items: found.items.slice(0, limit).map(normalize).filter(Boolean),
+    total: totalCount,
+    items: items.slice(0, limit).map(normalize).filter(Boolean),
   };
 }
 
@@ -90,7 +131,9 @@ function normalize(model) {
     },
     publishedAt: model.firstPublish ?? model.datePublished ?? null,
     nsfw: Boolean(model.nsfw),
-    paid: Boolean(model.price) || Boolean(model.club),
+    // `club` was renamed to `premium`; asking for the old name is now a hard
+    // GraphQL error, which is what the live structure test watches for.
+    paid: Boolean(model.price) || Boolean(model.premium),
   };
 }
 
@@ -117,19 +160,6 @@ export function buildImage(filePath) {
     `${MEDIA_HOST}${dir}/thumbs/inside/${size}/${extension}/${base}.webp`;
 
   return { thumb: thumb('640x480'), full: thumb('1280x960') };
-}
-
-function safeParse(text) {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-}
-
-function decodeBlob(text) {
-  // SvelteKit escapes the closing tag sequence when inlining the payload.
-  return text.replaceAll('\\u003C', '<').replaceAll('\\u003E', '>');
 }
 
 function numberOrNull(value) {

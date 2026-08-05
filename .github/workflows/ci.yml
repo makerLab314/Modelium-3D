@@ -21,17 +21,80 @@ concurrency:
 
 jobs:
   unit:
-    name: Unit tests
+    name: Unit tests (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # No dependencies to install — the project has none.
+      - run: npm test
+
+  package:
+    name: Package contents
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
-      # No dependencies to install — the project has none.
-      - run: npm test
+      # Asserts what `npm publish` would actually upload. The failure this
+      # guards against is shipping server/.env with a live API token in it,
+      # which cannot be undone once it reaches the registry. It has already
+      # caught that once: npm gives the "files" allowlist the last word, so the
+      # .npmignore entry everyone reaches for first does nothing.
+      - run: npm run pack:check
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: docker build -t modelium-3d:ci .
+
+      - name: Boot it and check the security posture
+        run: |
+          docker run -d --name modelium -p 8787:8787 modelium-3d:ci
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8787/api/health >/dev/null && break
+            sleep 1
+          done
+
+          health=$(curl -fsS http://127.0.0.1:8787/api/health)
+          echo "$health"
+          echo "$health" | grep -q '"mode":"server"' || { echo "::error::image did not start in server mode"; exit 1; }
+
+          # The claim token is printed once, to the log, and must appear in no
+          # response body — that is the whole basis of the first-run window.
+          token=$(docker logs modelium 2>&1 | grep -oE '[A-Za-z0-9_-]{43}' | head -1)
+          test -n "$token" || { echo "::error::no setup token in the log"; exit 1; }
+
+          for route in /api/health /api/settings /api/sources; do
+            if curl -fsS "http://127.0.0.1:8787$route" | grep -qF "$token"; then
+              echo "::error::the setup token leaked through $route"
+              exit 1
+            fi
+          done
+
+          # Server mode must not hand out the config path either.
+          curl -fsS http://127.0.0.1:8787/api/settings | grep -q '"readOnly":true' \
+            || { echo "::error::settings are not read-only in server mode"; exit 1; }
+
+      - name: Container log on failure
+        if: failure()
+        run: docker logs modelium || true
 
   structure:
     name: Upstream structure (${{ matrix.node }})
