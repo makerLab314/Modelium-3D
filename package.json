@@ -36,8 +36,8 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node --test \"test/*.test.js\"",
-    "test:live": "node --test \"test/live/*.test.js\"",
+    "test": "node scripts/run-tests.js test",
+    "test:live": "node scripts/run-tests.js test/live",
     "pack:check": "node scripts/check-package.js",
     "docker:build": "docker build -t modelium-3d ."
   },

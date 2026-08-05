@@ -22,11 +22,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
 
@@ -36,9 +36,24 @@ jobs:
       # between a live API token and the internet.
       - run: npm run pack:check
 
+      # Two things that are only correct if computed here.
+      #
+      # On a tag push github.ref_name is the tag; on workflow_dispatch it is the
+      # branch, so the tag has to come from the input instead — otherwise every
+      # step below quietly works on the wrong ref.
+      #
+      # And container registries reject uppercase in a repository name, so the
+      # owner has to be lowercased. "makerLab314" would fail the push outright.
+      - name: Resolve the tag and image name
+        id: meta
+        run: |
+          echo "tag=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/modelium-3d" >> "$GITHUB_OUTPUT"
+
       - name: Check the tag matches package.json
         run: |
-          tag="${GITHUB_REF_NAME#v}"
+          tag="${{ steps.meta.outputs.tag }}"
+          tag="${tag#v}"
           version=$(node -p "require('./package.json').version")
           test "$tag" = "$version" \
             || { echo "::error::tag $tag does not match package.json version $version"; exit 1; }
@@ -51,6 +66,7 @@ jobs:
       - name: Attach it to the release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.meta.outputs.tag }}
           files: ${{ steps.pack.outputs.file }}
           generate_release_notes: true
 
@@ -67,5 +83,5 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/modelium-3d:${{ github.ref_name }}
-            ghcr.io/${{ github.repository_owner }}/modelium-3d:latest
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.image }}:latest

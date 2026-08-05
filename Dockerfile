@@ -12,6 +12,15 @@ COPY --chown=node:node bin/ ./bin/
 COPY --chown=node:node server/ ./server/
 COPY --chown=node:node public/ ./public/
 
+# Create /data owned by the node user *before* declaring it a volume.
+#
+# Without this the directory is created implicitly, as root, and a fresh volume
+# inherits that ownership — so the process (uid 1000) cannot write there. The
+# failure is quiet and specific: the setup window checks whether the config
+# directory is writable and, finding it is not, opens as "disabled" instead. The
+# container then comes up looking healthy but permanently unconfigurable.
+RUN mkdir -p /data && chown node:node /data
+
 USER node
 
 # Server mode: the settings panel is read-only and configuration comes from the

@@ -30,9 +30,9 @@ jobs:
         node: [20, 22]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
 
@@ -43,9 +43,9 @@ jobs:
     name: Package contents
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
 
@@ -60,7 +60,7 @@ jobs:
     name: Docker image
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - run: docker build -t modelium-3d:ci .
 
@@ -76,8 +76,15 @@ jobs:
           echo "$health"
           echo "$health" | grep -q '"mode":"server"' || { echo "::error::image did not start in server mode"; exit 1; }
 
+          # Assert the state before hunting for the token, so a broken image says
+          # *why*. A /data the node user cannot write to shows up here as
+          # "disabled" — the container looks healthy and is unconfigurable, which
+          # is exactly how this check earned its place.
+          echo "$health" | grep -q '"setup":"open"' \
+            || { echo "::error::setup window is not open — is /data writable by uid 1000?"; exit 1; }
+
           # The claim token is printed once, to the log, and must appear in no
-          # response body — that is the whole basis of the first-run window.
+          # response body: that is the whole basis of the first-run window.
           token=$(docker logs modelium 2>&1 | grep -oE '[A-Za-z0-9_-]{43}' | head -1)
           test -n "$token" || { echo "::error::no setup token in the log"; exit 1; }
 
@@ -110,9 +117,9 @@ jobs:
         node: [20]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
 
