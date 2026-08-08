@@ -40,7 +40,20 @@ const raw = execFileSync('npm', ['pack', '--dry-run', '--json'], {
   shell: process.platform === 'win32',
 });
 
-const [tarball] = JSON.parse(raw);
+// npm 12 changed the shape of `pack --json`: up to npm 11 it was an array of
+// tarball objects, from 12 on it is an object keyed by package name. The fields
+// inside are the same either way, so normalise and carry on — this script has to
+// keep working on whatever npm the release runner happens to install, and it
+// broke a release once by assuming the array.
+const parsed = JSON.parse(raw);
+const [tarball] = Array.isArray(parsed) ? parsed : Object.values(parsed);
+
+if (!tarball?.files) {
+  console.error('npm pack --json returned a shape this script does not understand:');
+  console.error(raw.slice(0, 400));
+  process.exit(1);
+}
+
 const files = tarball.files.map((entry) => entry.path.replace(/\\/g, '/'));
 
 const problems = [];
