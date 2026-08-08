@@ -1,5 +1,10 @@
 # Modelium 3D
 
+[![npm](https://img.shields.io/npm/v/modelium-3d?color=%23cb3837&label=npm)](https://www.npmjs.com/package/modelium-3d)
+[![CI](https://github.com/makerLab314/Modelium-3D/actions/workflows/ci.yml/badge.svg)](https://github.com/makerLab314/Modelium-3D/actions/workflows/ci.yml)
+[![Container](https://img.shields.io/badge/ghcr.io-modelium--3d-blue)](https://github.com/makerLab314/Modelium-3D/pkgs/container/modelium-3d)
+[![License](https://img.shields.io/badge/license-GPL--3.0-green)](LICENSE)
+
 One search field for three 3D model libraries: **Printables**, **MakerWorld** and
 **Thingiverse**. Type once, get one merged and ranked list of results, each with
 a picture. Clicking a result opens the original listing on the original site,
@@ -10,37 +15,121 @@ sites cannot be queried from a browser directly (no CORS headers, one of them
 needs an API token), and because the merging and ranking belong on one side of
 the wire, not spread across three fetches in the page.
 
-## Getting started
+```bash
+npx modelium-3d
+```
 
-Pick whichever fits. All three run the same code; they differ only in where the
-settings live and who can change them.
+That is the whole quick start. Everything below is detail.
 
-### Try it
+**Contents** · [Install](#install) · [First run](#first-run) ·
+[Modes](#modes) · [Configuration](#configuration) · [Security](#security) ·
+[How it works](#how-it-works) · [API](#api) · [Interface](#interface) ·
+[Development](#development) · [Limits](#limits)
+
+## Install
+
+Five ways in. They all run the same code and differ in exactly two things: where
+the settings file ends up, and whether the settings panel is allowed to write to
+it. Pick by row.
+
+| Method | Best for | Settings live in | Needs |
+| --- | --- | --- | --- |
+| [`npx`](#npx) | Trying it, once | OS config directory | Node ≥ 20.11 |
+| [npm, global](#npm-global-install) | Using it on your own machine | OS config directory | Node ≥ 20.11 |
+| [Docker](#docker) | A homelab box, always on | `/data` in a volume | Docker |
+| [From source](#from-source) | Changing the code | `server/.env` | Node ≥ 20.11, git |
+| [Release tarball](#release-tarball) | No git, no registries | `server/.env` | Node ≥ 20.11 |
+
+There are no dependencies to install in any of them. The `node_modules` folder
+stays empty on purpose — the server is written against Node's standard library
+alone, so `npm install` has nothing to fetch and nothing to audit.
+
+### npx
 
 ```bash
 npx modelium-3d
 ```
 
-Opens a browser at <http://127.0.0.1:8787>. Nothing to install, nothing to clone,
-Node 20 or newer is enough. `--port`, `--host` and `--no-open` are there if you
-need them; `--help` lists the rest.
+Opens a browser at <http://127.0.0.1:8787>. Nothing to clone, nothing left
+behind but npm's own cache.
 
-### On a homelab
+Your Thingiverse token is *not* part of that cache: it goes into your OS config
+directory, so it survives both the cache being cleared and the next `npx` pulling
+a newer version. Configure once, `npx` forever.
+
+### npm, global install
+
+```bash
+npm install -g modelium-3d
+modelium-3d
+```
+
+Same thing without the startup delay, and `modelium-3d` is on your `PATH`.
+
+```bash
+npm update -g modelium-3d      # upgrade
+npm uninstall -g modelium-3d   # remove; the config directory stays
+```
+
+An upgrade replaces `node_modules/modelium-3d/` wholesale, which is precisely why
+the settings do not live there. See [Where the token is stored](#where-the-token-is-stored).
+
+### Docker
+
+The image is published on every release and is public — no login, no checkout:
+
+```bash
+docker run -d --name modelium -p 127.0.0.1:8787:8787 -v modelium-data:/data ghcr.io/makerlab314/modelium-3d:latest
+```
+
+Tags are `latest` and one per release (`v0.5.1`). Pin the version if you would
+rather decide when to upgrade.
+
+The container runs in **server mode**: it binds every interface *inside* the
+container, and its settings are read-only, configured through environment
+variables — a panel that can rewrite an API token should not be something anyone
+on the network can reach. [Modes](#modes) covers the one exception, which is how
+the Thingiverse token gets in on the first run.
+
+Note the `127.0.0.1:` in front of the port. Widen it deliberately: there is no
+login, so on a flat home network `-p 8787:8787` means everyone on it.
+
+For Compose, this is enough — save it as `docker-compose.yml` anywhere:
+
+```yaml
+services:
+  modelium:
+    image: ghcr.io/makerlab314/modelium-3d:latest
+    container_name: modelium
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - modelium-data:/data
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+
+volumes:
+  modelium-data:
+```
 
 ```bash
 docker compose up -d
 ```
 
-The container runs in **server mode**: it binds every interface, and its settings
-are read-only, with configuration coming from environment variables, because a panel
-that can rewrite an API token should not be a thing anyone on the network can
-reach. See [Modes](#modes) below for the one exception, which is how you get a
-Thingiverse token in there on the first run.
+The `docker-compose.yml` **in this repository** is not that file: it also carries
+`build: .`, so it compiles the image from the checkout instead of pulling it.
+That is what you want when you are working on the code, and not what you want on
+a server.
 
-`docker-compose.yml` publishes on `127.0.0.1` by default. Widen it deliberately:
-there is no login.
+The volume holds `.env` and the setup marker. A named volume like the one above
+is owned correctly out of the box; a bind mount needs `chown -R 1000:1000` first,
+and the app will tell you so rather than failing quietly.
 
-### From the source
+### From source
 
 ```bash
 git clone https://github.com/makerLab314/Modelium-3D
@@ -48,24 +137,76 @@ cd Modelium-3D
 npm start
 ```
 
-No dependencies to install. If you would rather not have a git repository, every
-[release](https://github.com/makerLab314/Modelium-3D/releases) carries a plain
-tarball of the same files.
+A checkout keeps its settings in `server/.env`, next to the code, which is where
+they have always been. `npm run dev` is the same thing with `--watch`.
 
-### The Thingiverse token
+### Release tarball
 
-Two of the three sources work immediately. Thingiverse needs a free token, and
-the app asks for it on first run: click **Settings**, paste the token, press
-**Test** to confirm it works, then **Save**. It is picked up straight away, with
-no restart and no environment variables to export.
+Every [release](https://github.com/makerLab314/Modelium-3D/releases) carries a
+plain `.tgz` of the same files — no git history, no tests, no CI config:
 
-To get one: create a **Desktop** app at
-<https://www.thingiverse.com/apps/create> and copy the **App Token**.
+```bash
+tar -xzf modelium-3d-0.5.1.tgz && cd package && node server/index.js
+```
 
-Where it is stored depends on how you started the app, and the Settings panel shows
-the exact path. A checkout keeps it in `server/.env`; an installed copy uses your
-OS config directory (`~/.config/modelium-3d/` or `%APPDATA%\modelium-3d\`), since
-`node_modules` is replaced on every upgrade; the container uses `/data`.
+### Command line options
+
+The `modelium-3d` command takes a few flags, which beat both the settings file
+and the environment:
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--port <n>` | `8787` | Port to listen on |
+| `--host <addr>` | `127.0.0.1` | Address to bind |
+| `--mode <name>` | `local` | `local` or `server`, see [Modes](#modes) |
+| `--config <dir>` | see below | Directory holding the `.env` file |
+| `--no-open` | — | Do not open a browser |
+| `--version` | — | Print the version and exit |
+| `--help` | — | Print the options and exit |
+
+```bash
+npx modelium-3d --port 9000 --no-open
+```
+
+Starting from a checkout with `npm start` runs `server/index.js` directly and
+takes no flags — use environment variables there.
+
+## First run
+
+Two of the three sources work immediately. Thingiverse rejects unauthenticated
+API calls, so it needs a token. It is free:
+
+1. Create a **Desktop** app at <https://www.thingiverse.com/apps/create>.
+2. Copy the **App Token**.
+3. In Modelium, click **Settings**, paste it, press **Test** to confirm it
+   actually works, then **Save**.
+
+It is picked up straight away — no restart, no environment variables to export.
+Until then Thingiverse shows as unconfigured and the other two sources carry the
+search.
+
+In `server` mode the panel is read-only, so this flow works differently there:
+see [the first-run window](#the-first-run-window).
+
+### Where the token is stored
+
+The settings panel always shows the exact path it is using. In order of
+precedence:
+
+| Condition | Path |
+| --- | --- |
+| `MODELIUM_ENV_FILE` set | that file |
+| `MODELIUM_CONFIG_DIR` set | `<dir>/.env` — the container points this at `/data` |
+| Running from a checkout | `server/.env` |
+| Installed (npx or npm) | `~/.config/modelium-3d/.env`, or `%APPDATA%\modelium-3d\.env` |
+
+The last two are the packaging half. An installed copy sits inside
+`node_modules/`, which npm replaces wholesale on every upgrade and which may not
+even be writable — a token saved there would quietly vanish. A checkout keeps the
+behaviour it has always had.
+
+The file is written atomically, set to `0600`, and git-ignored. The app rewrites
+keys in place, so any comments you add survive.
 
 ## Modes
 
@@ -85,10 +226,11 @@ earth. There is no heuristic that survives that, so the app refuses to start in
 `local` mode on anything but a loopback address rather than pretending otherwise.
 If something sits in front of it, use `server` mode.
 
-**The first-run window.** A fresh `server` mode instance would otherwise be
-impossible to configure through its own interface. So it opens once: for 15
-minutes, it accepts a single save from whoever presents the claim token it printed
-at startup.
+### The first-run window
+
+A fresh `server` mode instance would otherwise be impossible to configure through
+its own interface. So it opens once: for 15 minutes, it accepts a single save
+from whoever presents the claim token it printed at startup.
 
 ```bash
 docker logs modelium      # the token is in here, once
@@ -103,7 +245,65 @@ returned by any endpoint, and never logged twice.
 That means anyone who can read the container's logs during those 15 minutes can
 claim the instance. That is the operator, by definition, but it is worth knowing
 rather than discovering. Set `MODELIUM_SETUP=false` to skip the window entirely
-and configure only through the environment.
+and configure only through the environment:
+
+```bash
+docker run -d --name modelium -p 127.0.0.1:8787:8787 \
+  -e THINGIVERSE_TOKEN=… -e MODELIUM_SETUP=false \
+  -v modelium-data:/data ghcr.io/makerlab314/modelium-3d:latest
+```
+
+## Configuration
+
+Everything is optional and has a working default. The common settings are in the
+**Settings** panel; all of them can also be set in the `.env` file or as real
+environment variables, which win over the file.
+
+| Variable | Default | Meaning | In Settings |
+| --- | --- | --- | --- |
+| `THINGIVERSE_TOKEN` | empty | Enables the Thingiverse source | yes |
+| `PER_SOURCE_LIMIT` | `36` | Results requested per site, per page | yes |
+| `SOURCE_TIMEOUT_MS` | `12000` | Give up on a site after this long | yes |
+| `HIDE_NSFW` | `true` | Drop models a site flagged as not safe for work | yes |
+| `PROXY_IMAGES` | `true` | Serve result images through the local server | yes |
+| `PORT` | `8787` | Server port (restart to apply) | yes |
+| `HOST` | loopback, or `0.0.0.0` in server mode | Bind address | no |
+| `MODELIUM_MODE` | `local` | `local` or `server`, see [Modes](#modes) | no |
+| `MODELIUM_CONFIG_DIR` | see above | Directory holding `.env` and the setup marker | no |
+| `MODELIUM_ENV_FILE` | none | An explicit settings file, overriding the directory | no |
+| `MODELIUM_SETUP` | `true` | Whether the first-run window may open at all | no |
+| `MODELIUM_SETUP_WINDOW_MS` | `900000` | How long it stays open | no |
+| `MODELIUM_RATE_LIMIT` | on in server mode | `off` disables it | no |
+| `CACHE_TTL_MS` | `300000` | How long a search stays cached in memory | no |
+| `CACHE_MAX_ENTRIES` | `200` | Cache size | no |
+| `USER_AGENT` | a desktop Chrome string | Sent upstream | no |
+
+`server/.env.example` documents the same list. Copy it into place if you prefer
+editing a file to using the panel — the format is identical.
+
+## Security
+
+Worth stating plainly, because this ships as a server:
+
+- **There is no login.** `server` mode changes who may *write* settings, not who
+  may search. Anyone who can reach the port can use it. Put it behind something
+  if that matters.
+- **Tokens do not leave the machine.** Reading settings reports whether a secret
+  is set and its last four characters; in `server` mode not even that, nor the
+  file's path.
+- **The image proxy is not an open relay.** Seven CDN hosts are allowed, matched
+  by exact hostname, and every redirect hop is re-checked against the same list:
+  the allowlist is not just applied to the URL you hand it. What comes back is
+  typed from its own first bytes rather than from the upstream's `Content-Type`,
+  so a file uploaded as HTML or SVG cannot be served as script on this origin.
+- **`X-Forwarded-For` is never read**, anywhere. It is set by whatever is in front
+  of the server, which in the worst case is the caller.
+- Every response carries a strict `Content-Security-Policy`, `nosniff`, and
+  `frame-ancestors 'none'`. No CORS headers are sent, deliberately: another origin
+  can cause a request but can never read the answer.
+
+Found something? Open an issue, or, if it is sensitive, use GitHub's private
+vulnerability reporting on this repository.
 
 ## How it works
 
@@ -145,7 +345,7 @@ site's catalogue, not a duplicate to hide.
 | --- | --- | --- |
 | Printables | `api.printables.com/graphql/`, field `searchPrints2` | No key, and no allowlist of permitted queries. Introspection is off, so the field names come from the site's own bundles rather than from the schema. Replaced an earlier approach that lifted the payload out of the rendered search page: 17 KB instead of 730, and no `Link` header large enough to need a Node startup flag. |
 | MakerWorld | `api/v1/search-service/select/design2` | Public, no key. The older `select/design` still answers `200` but always with an empty list, which is worth knowing, because that failure looks exactly like "no results". |
-| Thingiverse | `api.thingiverse.com` | Needs an app token, see above. |
+| Thingiverse | `api.thingiverse.com` | Needs an app token, see [First run](#first-run). |
 
 Note what "no key" does not mean. PrusaSlicer and Prusa's firmware are open
 source; printables.com is not, and neither of the first two endpoints is
@@ -160,60 +360,6 @@ breakages take.
 These are unofficial endpoints. They can change without notice, which is why
 each adapter is isolated: if one breaks, the other two keep working and the UI
 says which one is down and why.
-
-## Configuration
-
-Everything is optional and has a working default. The common settings are in the
-**Settings** panel; all of them can also be set in `server/.env` or as real
-environment variables, which win over the file.
-
-| Variable | Default | Meaning | In Settings |
-| --- | --- | --- | --- |
-| `THINGIVERSE_TOKEN` | empty | Enables the Thingiverse source | yes |
-| `PER_SOURCE_LIMIT` | `36` | Results requested per site, per page | yes |
-| `SOURCE_TIMEOUT_MS` | `12000` | Give up on a site after this long | yes |
-| `HIDE_NSFW` | `true` | Drop models a site flagged as not safe for work | yes |
-| `PROXY_IMAGES` | `true` | Serve result images through the local server | yes |
-| `PORT` | `8787` | Server port (restart to apply) | yes |
-| `HOST` | loopback, or `0.0.0.0` in server mode | Bind address | no |
-| `MODELIUM_MODE` | `local` | `local` or `server`, see [Modes](#modes) | no |
-| `MODELIUM_CONFIG_DIR` | see above | Directory holding `.env` and the setup marker | no |
-| `MODELIUM_ENV_FILE` | none | An explicit settings file, overriding the directory | no |
-| `MODELIUM_SETUP` | `true` | Whether the first-run window may open at all | no |
-| `MODELIUM_SETUP_WINDOW_MS` | `900000` | How long it stays open | no |
-| `MODELIUM_RATE_LIMIT` | on in server mode | `off` disables it | no |
-| `CACHE_TTL_MS` | `300000` | How long a search stays cached in memory | no |
-| `CACHE_MAX_ENTRIES` | `200` | Cache size | no |
-| `USER_AGENT` | a desktop Chrome string | Sent upstream | no |
-
-`server/.env.example` documents the same list. Copy it into place if you prefer
-editing a file to using the panel: the format is identical, and the app rewrites
-keys in place, so your comments survive. The file is written atomically and set
-to `0600`, and it is git-ignored.
-
-## Security
-
-Worth stating plainly, because this ships as a server:
-
-- **There is no login.** `server` mode changes who may *write* settings, not who
-  may search. Anyone who can reach the port can use it. Put it behind something
-  if that matters.
-- **Tokens do not leave the machine.** Reading settings reports whether a secret
-  is set and its last four characters; in `server` mode not even that, nor the
-  file's path.
-- **The image proxy is not an open relay.** Seven CDN hosts are allowed, matched
-  by exact hostname, and every redirect hop is re-checked against the same list:
-  the allowlist is not just applied to the URL you hand it. What comes back is
-  typed from its own first bytes rather than from the upstream's `Content-Type`,
-  so a file uploaded as HTML or SVG cannot be served as script on this origin.
-- **`X-Forwarded-For` is never read**, anywhere. It is set by whatever is in front
-  of the server, which in the worst case is the caller.
-- Every response carries a strict `Content-Security-Policy`, `nosniff`, and
-  `frame-ancestors 'none'`. No CORS headers are sent, deliberately: another origin
-  can cause a request but can never read the answer.
-
-Found something? Open an issue, or, if it is sensitive, use GitHub's private
-vulnerability reporting on this repository.
 
 ## API
 
@@ -276,7 +422,7 @@ Worth knowing:
   shareable and survives a reload.
 - Recent searches are kept in `localStorage` and nowhere else.
 
-## Tests
+## Development
 
 ```bash
 npm test
@@ -299,8 +445,8 @@ npm run test:live
 ```
 
 The structure canary. This is the one that matters over time: it queries the
-three sites for real and asserts they still return the fields the adapters
-read ,  not which models come back, or how many. All three have broken silently
+three sites for real and asserts they still return the fields the adapters read
+— not which models come back, or how many. All three have broken silently
 before, which is the failure this is built to catch.
 
 GitHub Actions runs it daily (`.github/workflows/ci.yml`). It needs no secrets:
@@ -308,6 +454,27 @@ the Thingiverse checks skip themselves when `THINGIVERSE_TOKEN` is unset, and
 add the token as a repository secret of that name if you want them to run. On
 pull requests the job is `continue-on-error`, because a site being down is not a
 reason to block a merge.
+
+```bash
+npm run pack:check
+```
+
+Asserts what `npm publish` would actually upload, because shipping a `.env` with
+a live token in it cannot be undone once it reaches the registry.
+
+### Releasing
+
+Bump the version in `package.json`, then tag it:
+
+```bash
+git tag v0.5.1 && git push --tags
+```
+
+`.github/workflows/release.yml` takes it from there: it checks the tag against
+`package.json`, runs the tests and the package check, attaches a tarball to the
+GitHub release, pushes the container image, and publishes to npm. There is no
+`NPM_TOKEN` — npm authenticates through OIDC, minted per run and valid for
+nothing else.
 
 ## Limits
 
@@ -325,3 +492,7 @@ reason to block a merge.
 - The cache is in memory, so restarting the server empties it.
 - Two processes sharing one config directory would race on the settings file.
   Saves are serialized within a process; across processes they are not.
+
+## License
+
+[GPL-3.0](LICENSE).
