@@ -1,5 +1,21 @@
-ARG BUILD_FROM=node:22-alpine
-FROM ${BUILD_FROM}
+# Named directly rather than through BUILD_FROM and a build.yaml, for two
+# reasons the Supervisor spells out itself:
+#
+#   1. It validates build_from against a regex that requires a namespace, so the
+#      slashless `node:22-alpine` is rejected — and it does not fail on that, it
+#      falls back to ghcr.io/home-assistant/base. That base has no Node in it, so
+#      the real error surfaces much later as `npm: not found`.
+#   2. build.yaml is deprecated: "Move build parameters into the Dockerfile
+#      directly."
+#
+# This tag is multi-arch (amd64, arm64, arm/v7), and the Supervisor builds on the
+# Home Assistant machine with --platform, so it resolves to the right one.
+FROM node:22-alpine
+
+# Declared and deliberately unused. The Supervisor passes --build-arg BUILD_FROM
+# on every build; accepting it here keeps it out of the "build-args were not
+# consumed" warning, and consuming it in FROM is exactly the mistake above.
+ARG BUILD_FROM
 
 # The add-on version from config.yaml, handed over by the Supervisor. It is also
 # the npm version installed below, so the two cannot drift apart.

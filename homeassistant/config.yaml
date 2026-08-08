@@ -10,10 +10,13 @@ description: One search box for Printables, MakerWorld and Thingiverse
 url: https://github.com/makerLab314/Modelium-3D
 stage: stable
 
+# armv7 is left out on purpose: the Supervisor now reports it as a deprecated
+# arch value, alongside armhf and i386, and warns about every add-on that still
+# lists it. node:22-alpine would run there, so this is a choice about what to
+# claim support for, not a limitation.
 arch:
   - amd64
   - aarch64
-  - armv7
 
 # The image is a plain node:22-alpine with one npm package in it, so there is no
 # s6-overlay and nothing for the Supervisor's init to supervise. server/index.js
