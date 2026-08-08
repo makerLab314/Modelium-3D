@@ -28,7 +28,7 @@ That is the whole quick start. Everything below is detail.
 
 ## Install
 
-Five ways in. They all run the same code and differ in exactly two things: where
+Six ways in. They all run the same code and differ in exactly two things: where
 the settings file ends up, and whether the settings panel is allowed to write to
 it. Pick by row.
 
@@ -37,6 +37,7 @@ it. Pick by row.
 | [`npx`](#npx) | Trying it, once | OS config directory | Node ≥ 20.11 |
 | [npm, global](#npm-global-install) | Using it on your own machine | OS config directory | Node ≥ 20.11 |
 | [Docker](#docker) | A homelab box, always on | `/data` in a volume | Docker |
+| [Home Assistant](#home-assistant) | An existing HA box, configured from its own UI | the add-on's `/data` | HA OS or Supervised |
 | [From source](#from-source) | Changing the code | `server/.env` | Node ≥ 20.11, git |
 | [Release tarball](#release-tarball) | No git, no registries | `server/.env` | Node ≥ 20.11 |
 
@@ -128,6 +129,30 @@ a server.
 The volume holds `.env` and the setup marker. A named volume like the one above
 is owned correctly out of the box; a bind mount needs `chown -R 1000:1000` first,
 and the app will tell you so rather than failing quietly.
+
+### Home Assistant
+
+There is an add-on, in [`homeassistant/`](homeassistant/). Add this repository
+under **Settings ▸ Add-ons ▸ Add-on Store ▸ ⋮ ▸ Repositories**:
+
+```
+https://github.com/makerLab314/Modelium-3D
+```
+
+Then install **Modelium 3D**, fill in the options, and start it. It listens on
+port 8787 of the Home Assistant host, so every device on the network can reach
+it — that is the point of running it there rather than on a laptop.
+
+Home Assistant's options form replaces the Settings panel, which stays read-only
+because the add-on runs in [`server` mode](#modes). The first-run window is
+disabled outright: it exists so a container with no configuration interface can
+still be given a token once, and here the configuration interface is the thing
+installing it.
+
+The add-on deliberately does **not** use ingress, so it is reachable directly
+instead of only through the Home Assistant frontend. That is the trade-off you
+are choosing: no Home Assistant login in front of it. [DOCS.md](homeassistant/DOCS.md)
+spells out what that means.
 
 ### From source
 

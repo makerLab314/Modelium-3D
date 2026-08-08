@@ -1,0 +1,15 @@
+# All three arches name the same image on purpose.
+#
+# Add-ons normally point each arch at its own `ghcr.io/home-assistant/<arch>-base`
+# tag, because those tags are arch specific. `node:22-alpine` is not: it is one
+# multi-arch tag that already covers amd64, arm64 and arm/v7, and the Supervisor
+# builds on the Home Assistant host itself, so it resolves to the right one
+# without any of this file having to know which.
+#
+# Using the official Node image rather than a Home Assistant base also means the
+# add-on installs the published npm package instead of copying the source next to
+# it, which is what keeps this directory buildable on its own.
+build_from:
+  amd64: node:22-alpine
+  aarch64: node:22-alpine
+  armv7: node:22-alpine

@@ -1,0 +1,53 @@
+# Home Assistant add-on manifest.
+#
+# `version` is the npm version that gets installed: the Supervisor passes it to
+# the build as BUILD_VERSION and the Dockerfile installs exactly that release. So
+# this line is the only place a version has to be bumped for the add-on.
+name: Modelium 3D
+version: "0.5.1"
+slug: modelium_3d
+description: One search box for Printables, MakerWorld and Thingiverse
+url: https://github.com/makerLab314/Modelium-3D
+stage: stable
+
+arch:
+  - amd64
+  - aarch64
+  - armv7
+
+# The image is a plain node:22-alpine with one npm package in it, so there is no
+# s6-overlay and nothing for the Supervisor's init to supervise. server/index.js
+# handles SIGTERM itself.
+init: false
+startup: application
+boot: auto
+
+# This is the whole point of the add-on: a port on the Home Assistant host, so
+# every device on the network can reach it. There is deliberately no ingress —
+# see DOCS.md for what that would cost and why it is not free.
+ports:
+  8787/tcp: 8787
+ports_description:
+  8787/tcp: Web interface, reachable at http://<home-assistant>:8787
+
+# Restart the add-on if the server stops answering. Unlike the HEALTHCHECK in the
+# main Dockerfile this one is enforced by the Supervisor, which can actually act
+# on it.
+watchdog: http://[HOST]:[PORT:8787]/api/health
+
+# Mirrors the "In Settings: yes" half of the configuration table in the README.
+# The rest is either fixed by the add-on (mode, config directory, bind address)
+# or handled by Home Assistant itself (the port mapping above).
+options:
+  thingiverse_token: ""
+  per_source_limit: 36
+  source_timeout_ms: 12000
+  hide_nsfw: true
+  proxy_images: true
+
+schema:
+  thingiverse_token: password?
+  per_source_limit: int(1,100)
+  source_timeout_ms: int(1000,60000)
+  hide_nsfw: bool
+  proxy_images: bool

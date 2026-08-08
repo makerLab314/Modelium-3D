@@ -1,0 +1,9 @@
+# Makes this repository installable as a Home Assistant add-on repository:
+# Settings ▸ Add-ons ▸ Add-on Store ▸ ⋮ ▸ Repositories, then paste the URL below.
+#
+# The Supervisor scans top level directories for a config.yaml, which is how it
+# finds `homeassistant/`. Nothing else in this repository is affected by the
+# presence of this file.
+name: Modelium 3D
+url: https://github.com/makerLab314/Modelium-3D
+maintainer: makerLab314 (https://github.com/makerLab314)
