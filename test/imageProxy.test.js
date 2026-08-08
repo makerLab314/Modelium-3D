@@ -130,7 +130,10 @@ test('a redirect off the allowlist is refused and never fetched', async () => {
 
   assert.equal(response.status, 400);
   assert.equal(calls.length, 1, 'the hop off the allowlist must not be requested');
-  assert.ok(!calls.some((url) => url.includes('evil.com')));
+  // By hostname, not by substring: `includes` would also have passed for a URL
+  // that merely mentions the host, such as https://media.printables.com/evil.com,
+  // which is the one shape this assertion most needs to tell apart.
+  assert.ok(!calls.some((url) => new URL(url).hostname === 'evil.com'));
 });
 
 test('a redirect that stays on the allowlist is followed', async () => {

@@ -124,16 +124,30 @@ export function dedupe(items) {
   return merged;
 }
 
-const COMPARATORS = {
-  relevance: (a, b) => b.score - a.score,
-  popular: (a, b) => popularity(b) - popularity(a),
-  newest: (a, b) => timestamp(b) - timestamp(a),
-};
+/**
+ * A Map rather than an object literal, because `mode` reaches this from a query
+ * string.
+ *
+ * As a plain object, `COMPARATORS[mode]` also answers for everything on
+ * Object.prototype. `?sort=__proto__` returns Object.prototype itself — not
+ * nullish, so the `??` below would not catch it — and calling it throws
+ * "comparator is not a function", which is a 500 rather than a bad request.
+ * `constructor` and `toString` answer with real functions and quietly sort by
+ * nothing.
+ *
+ * app.js does check the parameter against SORT_MODES before it ever gets here,
+ * so none of that is reachable today. This is about the next caller.
+ */
+const COMPARATORS = new Map([
+  ['relevance', (a, b) => b.score - a.score],
+  ['popular', (a, b) => popularity(b) - popularity(a)],
+  ['newest', (a, b) => timestamp(b) - timestamp(a)],
+]);
 
-export const SORT_MODES = Object.keys(COMPARATORS);
+export const SORT_MODES = [...COMPARATORS.keys()];
 
 export function sortResults(items, mode = 'relevance') {
-  const comparator = COMPARATORS[mode] ?? COMPARATORS.relevance;
+  const comparator = COMPARATORS.get(mode) ?? COMPARATORS.get('relevance');
   return [...items].sort((a, b) => comparator(a, b) || b.score - a.score);
 }
 

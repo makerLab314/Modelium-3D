@@ -146,8 +146,13 @@ test('Thingiverse still answers the search API in the documented shape', async (
   assert.equal(typeof total, 'number');
 
   items.forEach((item) => assertShape(item, 'thingiverse'));
+  // The hostname, not a substring of the URL. `includes` would have accepted
+  // https://example.com/thingiverse.com and called the shape unchanged.
   assert.ok(
-    items.every((item) => item.url.includes('thingiverse.com')),
+    items.every((item) => {
+      const { hostname } = new URL(item.url);
+      return hostname === 'thingiverse.com' || hostname.endsWith('.thingiverse.com');
+    }),
     'Thingiverse model URLs no longer match the expected pattern',
   );
 });
