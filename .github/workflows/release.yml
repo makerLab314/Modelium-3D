@@ -10,16 +10,35 @@ on:
         description: Existing tag to build a release for
         required: true
 
-# Deliberately no npm publish step and no NPM_TOKEN. Publishing stays a manual
-# `npm publish` so the first release cannot happen by accident.
-permissions:
-  contents: write
-  packages: write
+# One-time setup for the npm job, which is not visible from this file alone:
+# npmjs.com → the modelium-3d package → Settings → Trusted Publisher, set to
+# GitHub Actions, repository makerLab314/Modelium-3D, workflow `release.yml`,
+# environment left blank. npm can only offer that form for a package that
+# already exists, so the very first version has to go up by hand from a laptop
+# (`npm publish`). Every version after it comes from here.
+#
+# No NPM_TOKEN anywhere in this repo, and there must never be one: the npm job
+# below authenticates with a short-lived OIDC token minted per run. A long-lived
+# token in secrets is the thing that gets stolen; this cannot be, because it does
+# not outlive the job.
+#
+# Job-level permissions only. The npm job needs id-token: write and nothing else,
+# and granting that here would hand it to the tarball/image job too.
+permissions: {}
 
 jobs:
   release:
     name: Tarball and image
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      packages: write
+
+    # The npm job checks out the same ref. On workflow_dispatch that is the
+    # input, not github.ref — see the meta step for why.
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
 
     steps:
       - uses: actions/checkout@v5
@@ -85,3 +104,69 @@ jobs:
           tags: |
             ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
             ${{ steps.meta.outputs.image }}:latest
+
+  npm:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+
+    # Last, on purpose. A release is all-or-nothing: if the tarball or the image
+    # failed, the registry should not get a version the other two do not have.
+    # npm is the irreversible one — a tag can be moved and an image retagged,
+    # but a published version can only be unpublished within 72 hours.
+    needs: release
+
+    permissions:
+      contents: read
+      # This one line is the whole credential. It lets the runner request an
+      # OIDC token from GitHub describing *this* workflow in *this* repo, which
+      # npm trades for publish rights after matching it against the trusted
+      # publisher configured on the package. Nothing is stored on either side.
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          # Writes the .npmrc that points publish at the public registry. Without
+          # it npm has no registry to present the OIDC token to.
+          registry-url: https://registry.npmjs.org
+
+      # Node 22 ships npm 10, which predates trusted publishing entirely and
+      # fails with an auth error rather than anything that names the cause.
+      - name: Get an npm that understands OIDC
+        run: |
+          npm install -g npm@latest
+          npm --version
+
+      # This job re-runs both gates rather than trusting the other job's word for
+      # it. They are cheap, and the registry is the one place where being wrong
+      # is permanent.
+      - run: npm test
+      - run: npm run pack:check
+
+      # workflow_dispatch exists to rebuild a release for an existing tag, and on
+      # that path the version is already up. Republishing is impossible by
+      # design, so treat it as done rather than as a failure — otherwise every
+      # rebuild ends in a red X that means nothing.
+      - name: Is this version already on the registry?
+        id: published
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if npm view "modelium-3d@$version" version >/dev/null 2>&1; then
+            echo "::notice::modelium-3d@$version is already published — nothing to do"
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # --provenance signs the build with the same OIDC identity, so npmjs.com
+      # can show which commit and which workflow produced the tarball. It checks
+      # package.json's repository.url against the repo running this, which is why
+      # that field has to stay pointed at the real repo.
+      - name: Publish
+        if: steps.published.outputs.needed == 'true'
+        run: npm publish --provenance
