@@ -12,14 +12,16 @@ export { SORT_MODES };
  * Query one source and never throw: a dead source must not take the other two
  * down with it. The returned report is what the UI shows in the source rail.
  */
-export async function searchSource(sourceId, query, { signal, page = 1 } = {}) {
+export async function searchSource(sourceId, query, { signal, page = 1, sort = 'relevance' } = {}) {
   const source = getSource(sourceId);
   if (!source) {
     return report(sourceId, sourceId, 'error', { message: 'Unknown source' });
   }
 
   const limit = config.perSourceLimit;
-  const cacheKey = `${sourceId}::${query.toLowerCase()}::${page}::${limit}`;
+  // `sort` belongs in the key: it is asked of the upstream site now, not applied
+  // afterwards, so two sort modes are two different fetches.
+  const cacheKey = `${sourceId}::${query.toLowerCase()}::${sort}::${page}::${limit}`;
   const cached = cache.get(cacheKey);
   if (cached) return visible({ ...cached, cached: true });
 
@@ -30,6 +32,7 @@ export async function searchSource(sourceId, query, { signal, page = 1 } = {}) {
       limit,
       offset: (page - 1) * limit,
       signal,
+      sort,
     });
 
     const decorated = items.map((item) => ({

@@ -57,11 +57,48 @@ function contentSecurityPolicy() {
  * same-origin CORP header additionally stops a cross-origin `<img src="/api/...">`
  * from being used to make this server fan out to the three upstream sites.
  */
-export function applySecurityHeaders(response) {
+export function applySecurityHeaders(response, request) {
   response.setHeader('content-security-policy', contentSecurityPolicy());
   response.setHeader('x-content-type-options', 'nosniff');
   response.setHeader('referrer-policy', 'no-referrer');
   response.setHeader('permissions-policy', 'geolocation=(), camera=(), microphone=(), payment=(), usb=()');
-  response.setHeader('cross-origin-opener-policy', 'same-origin');
   response.setHeader('cross-origin-resource-policy', 'same-origin');
+
+  // Sent only where the browser will honour it. On a plain-http LAN address —
+  // how this is reached from a phone, or through the Home Assistant add-on —
+  // the origin is not "potentially trustworthy", so the browser discards COOP
+  // and logs a warning for every single response, images included. Withholding
+  // it there costs nothing: the header was already being ignored, and the
+  // isolation this app actually depends on comes from the CSP and from CORP,
+  // neither of which is gated on a secure context.
+  if (isTrustworthyOrigin(request)) {
+    response.setHeader('cross-origin-opener-policy', 'same-origin');
+  }
+}
+
+/**
+ * Whether the browser will treat this response's origin as potentially
+ * trustworthy: https, or a loopback host regardless of scheme.
+ *
+ * `x-forwarded-proto` is honoured because a reverse proxy terminating TLS is the
+ * normal way to run this in server mode, and the header is only ever allowed to
+ * *add* COOP. Trusting a spoofed value grants nothing.
+ */
+function isTrustworthyOrigin(request) {
+  if (!request) return true;
+
+  const forwarded = String(request.headers['x-forwarded-proto'] ?? '')
+    .split(',')[0]
+    .trim()
+    .toLowerCase();
+  if (forwarded === 'https') return true;
+  if (request.socket?.encrypted) return true;
+
+  // Strip the port, and the brackets IPv6 literals carry in a Host header.
+  const host = String(request.headers.host ?? '')
+    .replace(/:\d+$/, '')
+    .replace(/^\[|\]$/g, '')
+    .toLowerCase();
+
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.endsWith('.localhost');
 }

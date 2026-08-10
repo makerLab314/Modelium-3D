@@ -7,6 +7,7 @@
  * source lands and the merged ranking changes.
  */
 
+import { createLists } from "./lists.js";
 import { createSettings } from "./settings.js";
 import { NAVIGABLE, safeUrl } from "./url.js";
 
@@ -36,6 +37,7 @@ const el = {
   more: document.querySelector("[data-more]"),
   moreButton: document.querySelector("[data-more-button]"),
   moreLabel: document.querySelector("[data-more-label]"),
+  listsCount: document.querySelector("[data-lists-count]"),
 };
 
 const RECENT_KEY = "modelium.recent";
@@ -62,7 +64,25 @@ const state = {
 
 const settings = createSettings({ onSaved: onSettingsSaved });
 
+/**
+ * One updater per bookmark currently on screen. Saving from a card, removing
+ * from the Lists panel and a change made in another tab all have to move every
+ * marker for that model, not just the one that was clicked. Cleared on each
+ * render, since the cards those closures point at are replaced wholesale.
+ */
+const savedButtons = new Set();
+
+const lists = createLists({ onChange: syncSaved });
+
 init();
+
+function syncSaved() {
+  savedButtons.forEach((update) => update());
+
+  const count = lists.total();
+  el.listsCount.hidden = count === 0;
+  el.listsCount.textContent = count > 99 ? "99+" : String(count);
+}
 
 async function init() {
   syncThemeLabel();
@@ -85,6 +105,7 @@ async function init() {
     el.input.select();
   });
 
+  syncSaved();
   await loadSources();
   renderRecent();
   restoreFromUrl();
@@ -325,6 +346,7 @@ function concatUnique(existing, incoming) {
 
 function render() {
   const notices = buildNotices();
+  savedButtons.clear();
   const cards = state.results.map((item, index) => buildCard(item, index + 1));
 
   el.grid.replaceChildren(...cards);
@@ -361,14 +383,14 @@ function render() {
   }
 }
 
+/**
+ * The card is an article with a link stretched across it rather than one big
+ * anchor, because the save button and the "also on" links have to be clickable
+ * without being nested inside another link — which is invalid, and which browsers
+ * resolve by dropping the inner control.
+ */
 function buildCard(item, index) {
-  const card = element("a", {
-    class: "card",
-    href: item.url,
-    target: "_blank",
-    rel: "noopener noreferrer",
-    "data-source": item.source,
-  });
+  const card = element("article", { class: "card", "data-source": item.source });
 
   const figure = element("figure", { class: "card__figure" });
   if (item.image?.thumb) {
@@ -379,8 +401,16 @@ function buildCard(item, index) {
       decoding: "async",
     });
     img.addEventListener("load", () => img.classList.add("is-loaded"));
-    img.addEventListener("error", () => img.remove());
+    // Removing the image left the figure empty, which in the dark theme is a
+    // near-black rectangle — indistinguishable from a thumbnail that loaded and
+    // happens to be dark. Say what happened instead.
+    img.addEventListener("error", () => {
+      img.remove();
+      figure.append(placeholder("Preview unavailable"));
+    });
     figure.append(img);
+  } else {
+    figure.append(placeholder("No preview"));
   }
   figure.append(
     element("span", { class: "card__tab" }, item.sourceLabel),
@@ -403,7 +433,6 @@ function buildCard(item, index) {
         { href: other.url, target: "_blank", rel: "noopener noreferrer" },
         other.sourceLabel,
       );
-      link.addEventListener("click", (event) => event.stopPropagation());
       also.append(link);
     });
     body.append(also);
@@ -412,11 +441,59 @@ function buildCard(item, index) {
   const stats = buildStats(item);
   if (stats) body.append(stats);
 
-  card.append(figure, body);
+  const link = element("a", {
+    class: "card__link",
+    href: item.url,
+    target: "_blank",
+    rel: "noopener noreferrer",
+  });
+  link.append(element("span", { class: "sr-only" }, `Open ${item.title} on ${item.sourceLabel}`));
+
+  card.append(figure, body, link, buildSaveButton(item));
   return card;
 }
 
+/**
+ * The bookmark. Saving puts the model on the active list; a second click takes
+ * it off whichever list it is on, so the filled state always undoes itself.
+ */
+function buildSaveButton(item) {
+  const button = element("button", { class: "card__save", type: "button" });
+  button.append(svgIcon(ICONS.bookmark));
+  button.append(element("span", { class: "sr-only" }, item.title));
+
+  const sync = () => {
+    const on = lists.listsFor(item.id);
+    button.dataset.saved = String(on.length > 0);
+    button.setAttribute("aria-pressed", String(on.length > 0));
+    button.title = on.length
+      ? `Saved in ${on.map((entry) => entry.name).join(", ")} — click to remove`
+      : `Save to "${lists.activeName()}"`;
+  };
+
+  button.addEventListener("click", () => {
+    lists.toggle(item);
+    sync();
+  });
+
+  savedButtons.add(sync);
+  sync();
+  return button;
+}
+
+/**
+ * Stands in for a thumbnail that is missing or would not load, so the tile reads
+ * as "no image" rather than as a black picture.
+ */
+function placeholder(text) {
+  const box = element("span", { class: "card__placeholder" });
+  box.append(svgIcon(ICONS.image), element("span", {}, text));
+  return box;
+}
+
 const ICONS = {
+  image: "M3 5.5h14v9H3v-9Zm0 6.5 3.5-3.5 3 3L13 8l4 4M7 8.4a.9.9 0 1 1-1.8 0 .9.9 0 0 1 1.8 0Z",
+  bookmark: "M5.5 3h9v14l-4.5-3.2L5.5 17V3Z",
   likes: "M10 16.5 4.2 11a3.6 3.6 0 0 1 5.1-5.1l.7.7.7-.7A3.6 3.6 0 0 1 15.8 11L10 16.5Z",
   downloads: "M10 3v9m0 0 3.4-3.4M10 12 6.6 8.6M4 15.5h12",
   rating: "m10 3 2.2 4.5 5 .7-3.6 3.5.9 4.9L10 14.3l-4.5 2.3.9-4.9L2.8 8.2l5-.7L10 3Z",

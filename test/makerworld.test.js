@@ -59,6 +59,27 @@ test('the adapter calls the endpoint the site itself uses', async () => {
   assert.equal(url.searchParams.get('offset'), '0');
 });
 
+/**
+ * MakerWorld ignores an `orderBy` it does not know rather than rejecting it, so
+ * a wrong value here would look like a working sort and quietly return the
+ * default order. Only field names it actually recognises may appear.
+ */
+test('the requested order is mapped onto a field the API recognises', async () => {
+  const expected = { relevance: 'score', popular: 'likeCount', newest: 'score' };
+
+  for (const [sort, orderBy] of Object.entries(expected)) {
+    let called = '';
+    await withFetch(
+      (url) => {
+        called = url;
+        return Promise.resolve(jsonResponse({ total: 0, hits: [] }));
+      },
+      () => search('benchy', { limit: 10, sort }),
+    );
+    assert.equal(new URL(called).searchParams.get('orderBy'), orderBy, `sort=${sort}`);
+  }
+});
+
 test('offset is passed through for later pages', async () => {
   let called = '';
 

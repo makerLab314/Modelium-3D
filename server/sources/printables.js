@@ -23,17 +23,39 @@ const ENDPOINT = 'https://api.printables.com/graphql/';
 
 /**
  * `ordering` is a SearchChoicesEnum and accepts exactly: best_match, latest,
- * popular, rating. We always ask for best_match and sort locally, because the
- * merge fuses three sites by rank (see lib/rank.js) and that only works while
- * every list is ordered by the same idea of relevance.
+ * popular, rating — all four verified against the live endpoint.
+ *
+ * The chosen order is asked for here rather than applied after the fact. Sorting
+ * a best_match sample by date locally answers "the newest of the 36 most
+ * relevant", which is not what Newest means: Printables' newest hits for a
+ * common term are minutes old and never appear in a relevance sample at all.
  */
-const SEARCH_QUERY = `query SearchModels($query: String!, $limit: Int, $offset: Int) {
+const ORDERINGS = new Map([
+  ['relevance', 'best_match'],
+  ['popular', 'popular'],
+  ['newest', 'latest'],
+]);
+
+const DEFAULT_ORDERING = ORDERINGS.get('relevance');
+
+/**
+ * A Map, for the reason lib/rank.js sets out at COMPARATORS: as a plain object
+ * this answers for everything on Object.prototype too. `sort=constructor` would
+ * return a function — not nullish, so a `??` fallback never fires — and JSON
+ * drops functions, so the variable would leave as `undefined` and the GraphQL
+ * call would fail on a non-nullable enum. Caught by test, not by review.
+ */
+function orderingFor(sort) {
+  return ORDERINGS.get(sort) ?? DEFAULT_ORDERING;
+}
+
+const SEARCH_QUERY = `query SearchModels($query: String!, $limit: Int, $offset: Int, $ordering: SearchChoicesEnum) {
   result: searchPrints2(
     query: $query
     printType: print
     limit: $limit
     offset: $offset
-    ordering: best_match
+    ordering: $ordering
   ) {
     totalCount
     items {
@@ -87,7 +109,7 @@ export function readResult(payload) {
   return { items: result.items, totalCount: result.totalCount ?? result.items.length };
 }
 
-export async function search(query, { limit, offset = 0, signal }) {
+export async function search(query, { limit, offset = 0, signal, sort = 'relevance' }) {
   const payload = await requestJson(ENDPOINT, {
     method: 'POST',
     signal,
@@ -99,7 +121,12 @@ export async function search(query, { limit, offset = 0, signal }) {
     body: JSON.stringify({
       operationName: 'SearchModels',
       query: SEARCH_QUERY,
-      variables: { query, limit: Math.min(limit, 100), offset },
+      variables: {
+        query,
+        limit: Math.min(limit, 100),
+        offset,
+        ordering: orderingFor(sort),
+      },
     }),
   });
 

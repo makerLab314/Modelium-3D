@@ -555,11 +555,91 @@ main {
   --source: var(--thingiverse);
 }
 
+/*
+ * focus-within rather than focus-visible: the card is an article now, and the
+ * thing that takes focus is the stretched link inside it.
+ */
 .card:hover,
-.card:focus-visible {
+.card:focus-within {
   transform: translateY(-3px);
   border-color: var(--source);
   box-shadow: var(--shadow-lift);
+}
+
+/*
+ * The whole card is the link. It sits above the body so a click anywhere opens
+ * the model, and below the controls that have to stay clickable — the bookmark
+ * and the "also on" links, which are real links of their own and so cannot be
+ * nested inside this one.
+ */
+.card__link {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: var(--radius);
+}
+
+.card__save,
+.card__also a {
+  position: relative;
+  z-index: 2;
+}
+
+.card__save {
+  position: absolute;
+  top: 0.4rem;
+  right: 2.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.card__save svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+}
+
+.card__save:hover {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+.card__save[data-saved="true"] {
+  color: var(--source);
+  border-color: var(--source);
+}
+
+/* Filled, so saved and unsaved are distinguishable without relying on colour. */
+.card__save[data-saved="true"] svg {
+  fill: currentColor;
+}
+
+/* Visible to a screen reader, out of the way of everything else. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 .card__figure {
@@ -586,6 +666,39 @@ main {
 
 .card__figure img.is-loaded {
   opacity: 1;
+}
+
+/*
+ * Shown when there is no thumbnail, or when one refused to load. Without it the
+ * tile is just the sunk paper colour, which at #101113 in the dark theme reads
+ * as a black photograph rather than as a missing one.
+ */
+.card__placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 0 0.6rem;
+}
+
+.card__placeholder svg {
+  width: 26px;
+  height: 26px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.75;
 }
 
 .card__tab {
@@ -1290,6 +1403,271 @@ main {
   border-left-color: var(--rule-strong);
 }
 
+/* --- Watchlists ---------------------------------------------------------- */
+
+/* A count, unlike the settings badge next to it, which is a bare dot. */
+.tool-button__pill {
+  min-width: 1.15rem;
+  padding: 0.05rem 0.28rem;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 0.62rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.sheet--wide {
+  width: min(760px, calc(100vw - 2rem));
+}
+
+.lists {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.lists__rail {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding: 0.75rem 1.35rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.list-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 0 0 auto;
+  padding: 0.3rem 0.6rem;
+  background: transparent;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+}
+
+.list-tab:hover {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+.list-tab[aria-pressed="true"] {
+  color: var(--paper);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.list-tab__count {
+  opacity: 0.7;
+}
+
+.lists__panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.lists__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.9rem 1.35rem 0.5rem;
+}
+
+.lists__title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.lists__tools {
+  display: flex;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+}
+
+.lists__tool {
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  padding: 0.25rem 0.55rem;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
+.lists__tool:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+.lists__tool:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.lists__tool[data-confirming="true"] {
+  color: var(--signal);
+  border-color: var(--signal);
+}
+
+.lists__prompt {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0 1.35rem 0.6rem;
+}
+
+.lists__input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.lists__input:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -1px;
+}
+
+.lists__name {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.lists__meta {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.lists__body {
+  overflow-y: auto;
+  padding: 0 1.35rem 1rem;
+}
+
+.lists__empty {
+  color: var(--muted);
+  font-size: 0.88rem;
+  padding: 1.5rem 0 2rem;
+  max-width: 42ch;
+}
+
+.saved {
+  --source: var(--muted);
+  display: grid;
+  grid-template-columns: 68px 1fr auto;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px dashed var(--rule);
+}
+
+.saved:last-child {
+  border-bottom: 0;
+}
+
+.saved[data-source="printables"] {
+  --source: var(--printables);
+}
+.saved[data-source="makerworld"] {
+  --source: var(--makerworld);
+}
+.saved[data-source="thingiverse"] {
+  --source: var(--thingiverse);
+}
+
+.saved__figure {
+  aspect-ratio: 4 / 3;
+  background: var(--paper-sunk);
+  border: 1px solid var(--rule);
+  border-left: 2px solid var(--source);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.saved__figure img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.saved__text {
+  min-width: 0;
+}
+
+.saved__title {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 550;
+  color: inherit;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saved__title:hover {
+  text-decoration: underline;
+}
+
+.saved__meta {
+  margin-top: 0.15rem;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saved__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.saved__move,
+.saved__remove {
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  padding: 0.25rem 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
+.saved__remove:hover {
+  color: var(--signal);
+  border-color: var(--signal);
+}
+
+.saved__move:hover {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
 @media (max-width: 720px) {
   .setup {
     margin-inline: 1rem;
@@ -1302,5 +1680,15 @@ main {
   .setup__actions .button {
     flex: 1;
     justify-content: center;
+  }
+
+  .saved {
+    grid-template-columns: 52px 1fr;
+    row-gap: 0.5rem;
+  }
+
+  .saved__actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
   }
 }

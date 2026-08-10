@@ -65,13 +65,39 @@ test('search posts the documented query and passes limit and offset through', as
   assert.equal(calls[0].options.method, 'POST');
 
   const body = JSON.parse(calls[0].options.body);
-  assert.deepEqual(body.variables, { query: 'voronoi lamp', limit: 2, offset: 36 });
+  assert.deepEqual(body.variables, {
+    query: 'voronoi lamp',
+    limit: 2,
+    offset: 36,
+    ordering: 'best_match',
+  });
   assert.match(body.query, /searchPrints2/);
-  assert.match(body.query, /ordering: best_match/);
+  assert.match(body.query, /ordering: \$ordering/);
 
   // The total is the site's, the item count is what we asked for.
   assert.equal(result.total, 3709);
   assert.equal(result.items.length, 2);
+});
+
+/**
+ * The chosen order has to reach the API. Sorting a best_match sample locally
+ * answers "the newest of the most relevant", which is a different question and
+ * the reason Newest used to return years-old models.
+ */
+test('search asks the API for the requested ordering', async () => {
+  const expected = { relevance: 'best_match', popular: 'popular', newest: 'latest' };
+
+  for (const [sort, ordering] of Object.entries(expected)) {
+    const { calls } = await withStubbedFetch(response, () => search('lamp', { limit: 5, sort }));
+    assert.equal(JSON.parse(calls[0].options.body).variables.ordering, ordering);
+  }
+});
+
+test('search falls back to best_match for an ordering the API does not have', async () => {
+  const { calls } = await withStubbedFetch(response, () =>
+    search('lamp', { limit: 5, sort: 'constructor' }),
+  );
+  assert.equal(JSON.parse(calls[0].options.body).variables.ordering, 'best_match');
 });
 
 test('search caps the requested limit at the 100 the API allows', async () => {

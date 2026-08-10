@@ -20,10 +20,20 @@ export function isConfigured() {
 }
 
 /**
+ * `sort` accepts relevant, popular, newest, makes and text. The three used here
+ * were each confirmed to change the order the API returns.
+ */
+const SORTS = new Map([
+  ['relevance', 'relevant'],
+  ['popular', 'popular'],
+  ['newest', 'newest'],
+]);
+
+/**
  * `token` lets the settings panel verify a value the user just typed without
  * saving it first. Everything else uses the configured one.
  */
-export async function search(query, { limit, offset = 0, signal, token }) {
+export async function search(query, { limit, offset = 0, signal, token, sort = 'relevance' }) {
   const credential = (token ?? config.thingiverseToken ?? '').trim();
 
   if (!credential) {
@@ -33,13 +43,17 @@ export async function search(query, { limit, offset = 0, signal, token }) {
     );
   }
 
-  const perPage = Math.min(limit, 30);
+  // 50 is where the API stops honouring the parameter — asking for 100 still
+  // returns 50. Capping at 30 (the previous value) handed Thingiverse six fewer
+  // slots per page than the other two sources get, and left `offset` unable to
+  // land on a page boundary for any limit that is not a multiple of 30.
+  const perPage = Math.min(limit, 50);
   // The query is a path segment here, and encodeURIComponent leaves `.` alone —
   // so a bare `..` would normalize this authenticated request onto a different
   // endpoint. Escaping dots keeps it where it was aimed.
   const url = new URL(`${API}/search/${encodeURIComponent(query).replaceAll('.', '%2E')}/`);
   url.searchParams.set('type', 'things');
-  url.searchParams.set('sort', 'relevant');
+  url.searchParams.set('sort', SORTS.get(sort) ?? SORTS.get('relevance'));
   url.searchParams.set('per_page', String(perPage));
   url.searchParams.set('page', String(Math.floor(offset / perPage) + 1));
 
@@ -87,7 +101,13 @@ function normalize(thing) {
       makes: numberOrNull(thing.make_count),
       rating: null,
     },
-    publishedAt: thing.added ?? thing.published ?? null,
+    // `created_at` is the only date a *search* hit carries. `added` exists, but
+    // only on /things/:id — reading just those two meant every search result
+    // reached the merge with `publishedAt: null`, and sorting by Newest scores a
+    // missing date as 0, so the whole source landed below every dated result
+    // from the other two sites. Verified against the live API: 30/30 hits carry
+    // `created_at`, 0/30 carry `added`.
+    publishedAt: thing.created_at ?? thing.added ?? thing.published ?? null,
     nsfw: Boolean(thing.is_nsfw),
     paid: false,
   };

@@ -35,6 +35,14 @@
         </p>
 
         <div class="masthead__tools">
+          <button class="tool-button" type="button" data-lists-open>
+            <svg viewBox="0 0 20 20" aria-hidden="true" class="tool-button__icon">
+              <path d="M5.5 3h9v14l-4.5-3.2L5.5 17V3Z" />
+            </svg>
+            <span>Lists</span>
+            <span class="tool-button__pill" data-lists-count hidden>0</span>
+          </button>
+
           <button class="tool-button" type="button" data-settings-open>
             <svg viewBox="0 0 20 20" aria-hidden="true" class="tool-button__icon">
               <circle cx="10" cy="10" r="2.6" />
@@ -164,6 +172,75 @@
       </p>
       <p class="colophon__sources" data-colophon></p>
     </footer>
+
+    <dialog class="sheet sheet--wide" data-lists-dialog aria-label="Watchlists">
+      <div class="sheet__form">
+        <header class="sheet__head">
+          <div>
+            <p class="sheet__label">Saved on this device</p>
+            <h2 class="sheet__title">Lists</h2>
+          </div>
+          <button class="sheet__close" type="button" data-lists-close aria-label="Close lists">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15" /></svg>
+          </button>
+        </header>
+
+        <div class="lists">
+          <div class="lists__rail" data-lists-rail role="group" aria-label="Your lists"></div>
+
+          <div class="lists__panel">
+            <div class="lists__head">
+              <div class="lists__title" data-lists-title></div>
+              <div class="lists__tools">
+                <button class="lists__tool" type="button" data-lists-rename>Rename</button>
+                <button class="lists__tool" type="button" data-lists-delete>Delete</button>
+              </div>
+            </div>
+
+            <!--
+              Inline rather than prompt()/confirm(): those are blocked outright
+              in a sandboxed iframe without allow-modals, which is how the Home
+              Assistant add-on serves this page. A dialog that silently never
+              appears reads as a dead button.
+            -->
+            <form class="lists__prompt" data-lists-prompt hidden>
+              <label class="sr-only" for="list-name">List name</label>
+              <input
+                id="list-name"
+                class="lists__input"
+                type="text"
+                maxlength="60"
+                autocomplete="off"
+                data-lists-input
+              />
+              <button class="lists__tool" type="submit" data-lists-confirm>Save</button>
+              <button class="lists__tool" type="button" data-lists-cancel>Cancel</button>
+            </form>
+
+            <div class="lists__body" data-lists-body></div>
+          </div>
+        </div>
+
+        <footer class="sheet__foot">
+          <p class="sheet__status" data-lists-status role="status" aria-live="polite"></p>
+          <div class="sheet__buttons">
+            <button class="button button--ghost" type="button" data-lists-import>Import</button>
+            <button class="button button--ghost" type="button" data-lists-export>Export</button>
+            <button class="button button--ghost" type="button" data-lists-new>New list</button>
+            <button class="button button--primary" type="button" data-lists-close>Done</button>
+          </div>
+        </footer>
+
+        <!-- Reads a file the user picks; nothing is uploaded. -->
+        <input
+          class="lists__file"
+          type="file"
+          accept="application/json,.json"
+          data-lists-import-input
+          hidden
+        />
+      </div>
+    </dialog>
 
     <dialog class="sheet" data-settings-dialog aria-label="Settings">
       <form class="sheet__form" method="dialog" data-settings-form>

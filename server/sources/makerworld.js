@@ -20,10 +20,30 @@ export const homepage = 'https://makerworld.com';
  */
 const SEARCH = 'https://makerworld.com/api/v1/search-service/select/design2';
 
-export async function search(query, { limit, offset = 0, signal }) {
+/**
+ * `orderBy` takes a field name, and an unrecognised one is ignored rather than
+ * rejected — the response still comes back 200, just in the default order, which
+ * is why every value here was checked against a live call. Recognised:
+ * `score` (default), `likeCount`, `downloadCount`, `collectionCount`,
+ * `printCount`.
+ *
+ * There is deliberately no entry for `newest`: no date field is accepted.
+ * `createTime`, `publishTime`, `updateTime`, `latest`, `new` and `recent` were
+ * all tried and all silently fall back to `score`. MakerWorld therefore
+ * contributes its most relevant hits to a Newest search, re-ordered by date in
+ * lib/rank.js — which is why that merge fuses by position per source rather
+ * than sorting one global list by date.
+ */
+const ORDERINGS = new Map([
+  ['relevance', 'score'],
+  ['popular', 'likeCount'],
+  ['newest', 'score'],
+]);
+
+export async function search(query, { limit, offset = 0, signal, sort = 'relevance' }) {
   const url = new URL(SEARCH);
   url.searchParams.set('keyword', query);
-  url.searchParams.set('orderBy', 'score');
+  url.searchParams.set('orderBy', ORDERINGS.get(sort) ?? ORDERINGS.get('relevance'));
   url.searchParams.set('designType', '0');
   url.searchParams.set('isFromSearchList', 'false');
   url.searchParams.set('offset', String(offset));

@@ -357,6 +357,32 @@ ourselves: how well the title matches the query, and how popular a model is
 compared to the other hits from the *same* site (so the biggest library does not
 automatically win every slot).
 
+The title term is capped, and deliberately kept to the same order of magnitude
+as the fusion term. An uncapped one turned the merged list into "sorted by how
+literally the title repeats the query", which is a signal each site already
+weighs — with far more to go on than a string comparison. Measured over 38 live
+queries, that cost the site with the most descriptive titles (MakerWorld) 19% of
+the top 20 against Printables' 43%, with its first hit landing as far down as
+rank 33.
+
+**Most liked** and **Newest** are asked of the sites themselves rather than
+applied afterwards, and are then fused by position the same way. Both halves of
+that matter:
+
+- Sorting a *relevance* sample by date answers "the newest of the 36 most
+  relevant", which is not the same question. Printables' and Thingiverse's
+  genuinely newest hits for a common term are minutes old and never appear in a
+  relevance sample at all.
+- Sorting one global list by date or by likes hands the page to whichever site
+  publishes most or counts highest. Before this, Newest gave MakerWorld 88% of
+  the top 20 on every query in that sample.
+
+MakerWorld is the exception on the first point: its search accepts `orderBy` as
+a field name and recognises `score`, `likeCount`, `downloadCount`,
+`collectionCount` and `printCount` — no date field at all, and an unknown value
+is ignored rather than rejected. So Newest asks it for its most relevant hits
+and re-ranks those by date locally.
+
 ### Deduplication
 
 Creators cross post. When the same title and author show up on more than one
@@ -447,6 +473,23 @@ Worth knowing:
   shareable and survives a reload.
 - Recent searches are kept in `localStorage` and nowhere else.
 
+### Watchlists
+
+The bookmark on any result saves it to a list. **Lists** in the header opens the
+panel: switch between lists, create and rename them, move a model from one to
+another, or drop it.
+
+Lists are local in the strict sense — they live in this browser's
+`localStorage`, nothing is sent to the server when you save, and nothing about
+them leaves the machine. Each entry keeps its own copy of the card (title,
+author, thumbnail, link) rather than a reference, so a saved model still renders
+without searching all three sites again, and still shows something if it is
+later taken down.
+
+**Export** writes the lists to a JSON file and **Import** merges one back in —
+lists are matched by name and a model already on a list is not duplicated. That
+is how a list gets to a second browser or survives clearing site data.
+
 ## Development
 
 ```bash
@@ -511,9 +554,15 @@ nothing else.
   homelab keeps a residential one.
 - Ranking is computed per page, so **Load more** appends a freshly fused page
   rather than re-ranking everything seen so far.
-- Printables is always queried by best match and sorted locally, because rank
-  fusion only works while all three lists mean the same thing by "first". Its API
-  does offer `latest`, `popular` and `rating` if that changes.
+- MakerWorld's search cannot be ordered by date, so under **Newest** it
+  contributes its most relevant hits re-ranked locally rather than its genuinely
+  newest uploads. See [Ranking](#ranking).
+- Thingiverse's search results carry likes but no download count — only the
+  per-model endpoint has one, which would be a request per result. Its entries
+  therefore compete on likes alone.
+- Watchlists live in this browser's `localStorage`. They are not synced, they do
+  not follow you to another device, and clearing site data clears them. Export
+  writes a JSON file you can import elsewhere.
 - The cache is in memory, so restarting the server empties it.
 - Two processes sharing one config directory would race on the settings file.
   Saves are serialized within a process; across processes they are not.

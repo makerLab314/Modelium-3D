@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -19,10 +20,27 @@ async function withServer(run) {
   const { port } = server.address();
   const base = `http://127.0.0.1:${port}`;
 
+  /** A request built by hand, for the headers fetch refuses to send. */
+  const raw = (route, headers = {}) =>
+    new Promise((resolve, reject) => {
+      const request = http.request(
+        { host: '127.0.0.1', port, path: route, method: 'GET', headers },
+        (response) => {
+          response.resume();
+          response.on('end', () =>
+            resolve({ status: response.statusCode, headers: response.headers }),
+          );
+        },
+      );
+      request.on('error', reject);
+      request.end();
+    });
+
   try {
     return await run({
       base,
       port,
+      raw,
       get: (route, init) => fetch(base + route, init),
     });
   } finally {
@@ -40,6 +58,39 @@ test('every response carries the security headers', async () => {
       assert.match(response.headers.get('content-security-policy'), /frame-ancestors 'none'/, route);
       assert.equal(response.headers.get('access-control-allow-origin'), null, route);
     }
+  });
+});
+
+/**
+ * COOP is only honoured on a potentially trustworthy origin. Sending it over
+ * plain http to a LAN address — a phone, or the Home Assistant add-on — made the
+ * browser log a warning for every response including each of the ~100
+ * thumbnails on a page, so it goes out only where it will be respected.
+ */
+test('the opener policy is sent on a trustworthy origin and withheld otherwise', async () => {
+  await withServer(async ({ port, raw }) => {
+    // `Host` is a forbidden header for fetch, which drops it silently — so these
+    // go out over a hand-written request instead.
+    const loopback = await raw('/api/health', { host: `127.0.0.1:${port}` });
+    assert.equal(loopback.headers['cross-origin-opener-policy'], 'same-origin');
+
+    const named = await raw('/api/health', { host: `localhost:${port}` });
+    assert.equal(named.headers['cross-origin-opener-policy'], 'same-origin');
+
+    const lan = await raw('/api/health', { host: '192.168.1.40' });
+    assert.equal(lan.headers['cross-origin-opener-policy'], undefined);
+
+    // A TLS-terminating reverse proxy is the normal server-mode deployment.
+    const behindProxy = await raw('/api/health', {
+      host: '192.168.1.40',
+      'x-forwarded-proto': 'https',
+    });
+    assert.equal(behindProxy.headers['cross-origin-opener-policy'], 'same-origin');
+
+    // Nothing else in the policy is conditional on any of that.
+    assert.equal(lan.headers['cross-origin-resource-policy'], 'same-origin');
+    assert.match(lan.headers['content-security-policy'], /script-src 'self'/);
+    assert.equal(lan.headers['x-content-type-options'], 'nosniff');
   });
 });
 
@@ -221,4 +272,44 @@ test('the image proxy refuses a host outside the allowlist', async () => {
     assert.equal(response.status, 400);
     assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
   });
+});
+
+/**
+ * One page of results is one image request per hit — 3 × PER_SOURCE_LIMIT of
+ * them, all at once, none of them the caller's doing. Sharing the search budget
+ * (20 tokens) meant that in server mode most thumbnails on the very first page
+ * came back 429 and the grid rendered as empty tiles.
+ */
+test('a page worth of thumbnails does not exhaust the search budget', async () => {
+  const previousMode = process.env.MODELIUM_MODE;
+  const previousLimit = process.env.MODELIUM_RATE_LIMIT;
+  process.env.MODELIUM_MODE = 'server';
+  delete process.env.MODELIUM_RATE_LIMIT;
+  const { refreshConfig } = await import('../server/config.js');
+  refreshConfig();
+
+  try {
+    await withServer(async ({ get }) => {
+      const wanted = config.perSourceLimit * 3;
+      let throttled = 0;
+
+      for (let i = 0; i < wanted; i++) {
+        // Rejected by the allowlist, so nothing leaves the machine — but the
+        // limiter runs before the allowlist does, which is the part under test.
+        const response = await get(`/img?u=https%3A%2F%2Fevil.com%2F${i}.png`);
+        if (response.status === 429) throttled += 1;
+      }
+
+      assert.equal(throttled, 0, `${throttled} of ${wanted} thumbnails were rate limited`);
+
+      // The search budget is still its own, and still tight.
+      const search = await get('/api/search?q=');
+      assert.notEqual(search.status, 429, 'image traffic drained the search budget');
+    });
+  } finally {
+    if (previousMode === undefined) delete process.env.MODELIUM_MODE;
+    else process.env.MODELIUM_MODE = previousMode;
+    if (previousLimit !== undefined) process.env.MODELIUM_RATE_LIMIT = previousLimit;
+    refreshConfig();
+  }
 });

@@ -62,6 +62,46 @@ function assertSomeStats(items, keys, source) {
   }
 }
 
+/**
+ * `publishedAt` has to be a real date on most results, not merely present.
+ *
+ * assertShape only checks that the key exists, because an individual model may
+ * legitimately have no date — and that hole hid a real bug for the whole life of
+ * the Thingiverse adapter. It read `added`, which only /things/:id returns;
+ * every *search* hit carries `created_at` instead, so all 30 results per page
+ * arrived with publishedAt null. Sorting by Newest scores a missing date as 0,
+ * which put the entire source below every dated result from the other two, 71
+ * rows down and never once inside the first page.
+ */
+function assertDated(items, source) {
+  const dated = items.filter((item) => Number.isFinite(Date.parse(item.publishedAt ?? '')));
+  assert.ok(
+    dated.length >= items.length * 0.9,
+    `${source}: only ${dated.length}/${items.length} results carried a parseable publishedAt — date field renamed?`,
+  );
+}
+
+/**
+ * The order asked for has to be the order that comes back.
+ *
+ * Both remaining ways this can fail are silent. Printables rejects an unknown
+ * `ordering` outright, but MakerWorld ignores one and answers 200 in its default
+ * order, and Thingiverse does the same — so "the request succeeded" says nothing
+ * about whether the sort took. Comparing the two result sets is what does.
+ */
+async function assertOrderingTakes(source, name) {
+  const relevance = await source.search(QUERY, { limit: 12, sort: 'relevance' });
+  const newest = await source.search(QUERY, { limit: 12, sort: 'newest' });
+
+  const ids = new Set(relevance.items.map((item) => item.sourceId));
+  const shared = newest.items.filter((item) => ids.has(item.sourceId)).length;
+
+  assert.ok(
+    shared < newest.items.length,
+    `${name}: sort=newest returned the same models as sort=relevance — the ordering parameter is being ignored`,
+  );
+}
+
 test('Printables still answers searchPrints2 with the fields the adapter reads', async () => {
   const { items, total } = await printables.search(QUERY, { limit: 12 });
 
@@ -74,6 +114,11 @@ test('Printables still answers searchPrints2 with the fields the adapter reads',
     'Printables model URLs no longer match the expected pattern',
   );
   assertSomeStats(items, ['likes', 'downloads'], 'printables');
+  assertDated(items, 'printables');
+});
+
+test('Printables honours the requested ordering', async () => {
+  await assertOrderingTakes(printables, 'Printables');
 });
 
 /**
@@ -119,6 +164,29 @@ test('MakerWorld still answers on select/design2 with a populated hit list', asy
     'MakerWorld model URLs no longer match the expected pattern',
   );
   assertSomeStats(items, ['likes', 'downloads'], 'makerworld');
+  assertDated(items, 'makerworld');
+});
+
+/**
+ * Deliberately only `popular`. MakerWorld's search takes a field name for
+ * `orderBy` and recognises `score`, `likeCount`, `downloadCount`,
+ * `collectionCount` and `printCount` — no date field at all. `createTime`,
+ * `publishTime`, `updateTime`, `latest`, `new` and `recent` were each tried
+ * against the live endpoint and each silently fell back to `score`, which is why
+ * the adapter maps `newest` onto `score` and lib/rank.js re-ranks by date
+ * afterwards instead of trusting the site's order.
+ */
+test('MakerWorld honours the most-liked ordering', async () => {
+  const relevance = await makerworld.search(QUERY, { limit: 12, sort: 'relevance' });
+  const popular = await makerworld.search(QUERY, { limit: 12, sort: 'popular' });
+
+  const ids = new Set(relevance.items.map((item) => item.sourceId));
+  const shared = popular.items.filter((item) => ids.has(item.sourceId)).length;
+
+  assert.ok(
+    shared < popular.items.length,
+    'MakerWorld ignored orderBy=likeCount — it answers 200 in the default order rather than rejecting an unknown field',
+  );
 });
 
 test('MakerWorld paginates by offset', async () => {
@@ -154,5 +222,34 @@ test('Thingiverse still answers the search API in the documented shape', async (
       return hostname === 'thingiverse.com' || hostname.endsWith('.thingiverse.com');
     }),
     'Thingiverse model URLs no longer match the expected pattern',
+  );
+  assertSomeStats(items, ['likes'], 'thingiverse');
+  assertDated(items, 'thingiverse');
+});
+
+test('Thingiverse honours the requested ordering', async (t) => {
+  if (!thingiverse.isConfigured()) return t.skip('THINGIVERSE_TOKEN not set');
+  await assertOrderingTakes(thingiverse, 'Thingiverse');
+});
+
+/**
+ * The per-page cap and the offset have to agree, or later pages repeat models
+ * the first page already showed. The adapter turns `offset` into a page number,
+ * which only lands on a boundary while the cap divides the limit — it used to
+ * cap at 30 against a default limit of 36.
+ */
+test('Thingiverse paginates by offset', async (t) => {
+  if (!thingiverse.isConfigured()) return t.skip('THINGIVERSE_TOKEN not set');
+
+  const first = await thingiverse.search(QUERY, { limit: 6, offset: 0 });
+  const second = await thingiverse.search(QUERY, { limit: 6, offset: 6 });
+
+  assert.ok(second.items.length > 0, 'Thingiverse returned nothing for the second page');
+
+  const firstIds = new Set(first.items.map((item) => item.sourceId));
+  const overlap = second.items.filter((item) => firstIds.has(item.sourceId));
+  assert.ok(
+    overlap.length < second.items.length,
+    'Thingiverse ignored offset — every second-page hit repeated the first page',
   );
 });

@@ -13,7 +13,7 @@ import { createSetupWindow, STATES } from './lib/setupWindow.js';
 import { ENV_PATH } from './lib/env.js';
 import { serveStatic } from './lib/static.js';
 import { describeSettings, saveSettings, testSource } from './settings.js';
-import { describeSources } from './sources/index.js';
+import { describeSources, sourceIds } from './sources/index.js';
 import { merge, resolveSources, searchSource, SORT_MODES } from './search.js';
 
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -48,14 +48,37 @@ const ROUTES = {
   '/api/setup/finish': ['POST'],
 };
 
-/** One search fans out to three sites; images stream. Both deserve their own budget. */
+/**
+ * Three budgets, because the three kinds of request cost wildly different
+ * things.
+ *
+ * A search fans out to three sites and is the one worth rationing hard. An image
+ * is a single fetch from a CDN — but a *page* of results is one image per hit,
+ * so the count is bound to `perSourceLimit`, not to how fast anyone is clicking.
+ * Sharing one bucket between the two was the bug this replaces: on the default
+ * settings a single search renders 3 × 36 = 108 thumbnails against a bucket of
+ * 20, so in server mode almost every thumbnail on the first page came back 429
+ * and the grid filled with empty tiles.
+ *
+ * The image budget is derived from the page size rather than written down, so
+ * raising "Results per site" cannot quietly reintroduce it. Two pages' worth of
+ * headroom covers a "Load more" straight after a search; the refill then carries
+ * ordinary browsing.
+ */
 function buildLimiters() {
   const local = config.mode !== 'server';
   const off = process.env.MODELIUM_RATE_LIMIT === 'off';
   const enabled = !off && !local;
 
+  const perPage = config.perSourceLimit * sourceIds.length;
+
   return {
     expensive: createRateLimiter({ capacity: 20, refillPerSecond: 0.5, enabled }),
+    images: createRateLimiter({
+      capacity: Math.max(240, perPage * 2),
+      refillPerSecond: Math.max(20, perPage / 4),
+      enabled,
+    }),
     cheap: createRateLimiter({ capacity: 120, refillPerSecond: 2, enabled }),
   };
 }
@@ -78,7 +101,7 @@ export function createApp({ setupWindow } = {}) {
   let openStreams = 0;
 
   const server = http.createServer(async (req, res) => {
-    applySecurityHeaders(res);
+    applySecurityHeaders(res, req);
 
     try {
       let url;
@@ -100,10 +123,7 @@ export function createApp({ setupWindow } = {}) {
         return res.end(JSON.stringify({ error: `Use ${allowed.join(' or ')}` }));
       }
 
-      const budget = allowed && (url.pathname === '/api/search' || url.pathname === '/img')
-        ? limiters.expensive
-        : limiters.cheap;
-      const permit = budget.take(callerOf(req));
+      const permit = budgetFor(limiters, url.pathname, allowed).take(callerOf(req));
       if (!permit.ok) {
         res.writeHead(429, {
           'retry-after': String(permit.retryAfter),
@@ -154,7 +174,7 @@ export function createApp({ setupWindow } = {}) {
     const reports = [];
 
     const runs = selected.map(async (sourceId) => {
-      const report = await searchSource(sourceId, query, { signal: controller.signal, page });
+      const report = await searchSource(sourceId, query, { signal: controller.signal, page, sort });
       reports.push(report);
       return report;
     });
@@ -207,6 +227,13 @@ export function createApp({ setupWindow } = {}) {
   }
 
   return server;
+}
+
+function budgetFor(limiters, pathname, allowed) {
+  if (!allowed) return limiters.cheap;
+  if (pathname === '/api/search') return limiters.expensive;
+  if (pathname === '/img') return limiters.images;
+  return limiters.cheap;
 }
 
 /** Concurrent SSE streams. Each one is three upstream requests. */
