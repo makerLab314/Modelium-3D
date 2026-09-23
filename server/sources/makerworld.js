@@ -6,19 +6,21 @@ export const label = 'MakerWorld';
 export const homepage = 'https://makerworld.com';
 
 /**
- * MakerWorld powers its own site with this endpoint, so no key is needed.
+ * The same search service the site uses, reached through the host Bambu
+ * Studio and the Bambu Handy app talk to. No key is needed.
  *
- * Note the `2`: the older `select/design` still answers 200 but has returned an
- * empty hit list since MakerWorld moved the site over, which looks exactly like
- * "nothing matched". `select/design2` is what their search page calls now. The
+ * Not `makerworld.com/api/...`: since September 2026 everything on
+ * makerworld.com, the JSON API included, sits behind a Cloudflare managed
+ * challenge (`403` with `cf-mitigated: challenge`) that a server side fetch
+ * cannot clear. `api.bambulab.com` serves the identical payload unchallenged,
+ * and honours `orderBy` and `offset` the same way.
+ *
+ * Note the `2`: the older `select/design` answered 200 with an empty hit list
+ * once MakerWorld moved over, which looks exactly like "nothing matched". The
  * site also sends a `searchSessionId`, but that is analytics — omitting it
  * changes nothing about the results.
- *
- * The HTML search page is not an option as a fallback: it sits behind a
- * Cloudflare interstitial that a server side fetch cannot clear. The JSON API
- * is not challenged.
  */
-const SEARCH = 'https://makerworld.com/api/v1/search-service/select/design2';
+const SEARCH = 'https://api.bambulab.com/v1/search-service/select/design2';
 
 /**
  * `orderBy` takes a field name, and an unrecognised one is ignored rather than
@@ -49,13 +51,7 @@ export async function search(query, { limit, offset = 0, signal, sort = 'relevan
   url.searchParams.set('offset', String(offset));
   url.searchParams.set('limit', String(Math.min(limit, 40)));
 
-  const payload = await requestJson(url.toString(), {
-    signal,
-    headers: {
-      referer: `https://makerworld.com/en/search/models?keyword=${encodeURIComponent(query)}`,
-      origin: 'https://makerworld.com',
-    },
-  });
+  const payload = await requestJson(url.toString(), { signal });
 
   // `hits: null` with a non-zero total is how the bot filter answers. Reporting
   // that as an empty result set would be a lie, so it is surfaced as blocked.

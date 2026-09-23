@@ -39,7 +39,11 @@ const design = (id, title) => ({
   nsfw: false,
 });
 
-test('the adapter calls the endpoint the site itself uses', async () => {
+/**
+ * The host is pinned too: makerworld.com now answers every API call with a
+ * Cloudflare challenge, so drifting back to it would break search outright.
+ */
+test('the adapter calls the search service on the unchallenged app host', async () => {
   let called = '';
 
   await withFetch(
@@ -53,7 +57,8 @@ test('the adapter calls the endpoint the site itself uses', async () => {
   );
 
   const url = new URL(called);
-  assert.equal(url.pathname, '/api/v1/search-service/select/design2');
+  assert.equal(url.hostname, 'api.bambulab.com');
+  assert.equal(url.pathname, '/v1/search-service/select/design2');
   assert.equal(url.searchParams.get('keyword'), 'benchy');
   assert.equal(url.searchParams.get('orderBy'), 'score');
   assert.equal(url.searchParams.get('offset'), '0');
@@ -127,6 +132,25 @@ test('an empty hit list next to a real total is reported, not passed off as no r
       () => search('benchy', { limit: 10 }),
     ),
     (error) => error instanceof SourceError && error.kind === 'blocked',
+  );
+});
+
+test('a Cloudflare challenge is named in the error, not left as a bare 403', async () => {
+  await assert.rejects(
+    withFetch(
+      () =>
+        Promise.resolve(
+          new Response('<title>Just a moment...</title>', {
+            status: 403,
+            headers: { 'content-type': 'text/html', 'cf-mitigated': 'challenge' },
+          }),
+        ),
+      () => search('benchy', { limit: 10 }),
+    ),
+    (error) =>
+      error instanceof SourceError &&
+      error.kind === 'blocked' &&
+      error.message === 'Upstream answered 403 (Cloudflare challenge)',
   );
 });
 

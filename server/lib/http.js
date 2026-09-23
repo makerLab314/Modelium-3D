@@ -33,6 +33,13 @@ export async function request(url, options = {}) {
       headers: {
         'user-agent': config.userAgent,
         'accept-language': 'en-US,en;q=0.9',
+        // The three low-entropy Client Hints, matched to config.chromeMajor —
+        // see the comment on userAgent in config.js for why they travel
+        // together. `"Not.A/Brand"` is the literal placeholder brand Chromium
+        // itself sends; there is no real vendor by that name to impersonate.
+        'sec-ch-ua': `"Chromium";v="${config.chromeMajor}", "Not.A/Brand";v="24", "Google Chrome";v="${config.chromeMajor}"`,
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"',
         ...headers,
       },
     });
@@ -57,11 +64,23 @@ function describe(error) {
   return cause.code ? `${cause.code} (${cause.message ?? error.message})` : cause.message;
 }
 
+/**
+ * A Cloudflare challenge is a 403 like any other, but it is not something a
+ * retry, a header or a token fixes — the endpoint has to change. Naming it in
+ * the message saves rediscovering that from a bare status code.
+ */
+function statusMessage(response) {
+  if (response.headers.get('cf-mitigated') === 'challenge') {
+    return `Upstream answered ${response.status} (Cloudflare challenge)`;
+  }
+  return `Upstream answered ${response.status}`;
+}
+
 export async function requestText(url, options) {
   const response = await request(url, options);
   if (!response.ok) {
     throw new SourceError(
-      `Upstream answered ${response.status}`,
+      statusMessage(response),
       response.status === 403 || response.status === 429 ? 'blocked' : 'unavailable',
     );
   }
@@ -82,7 +101,7 @@ export async function requestJson(url, options) {
         : response.status === 429
           ? 'blocked'
           : 'unavailable';
-    throw new SourceError(`Upstream answered ${response.status}`, kind);
+    throw new SourceError(statusMessage(response), kind);
   }
 
   try {

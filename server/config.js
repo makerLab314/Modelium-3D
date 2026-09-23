@@ -66,10 +66,27 @@ export function refreshConfig() {
      */
     thingiverseToken: (process.env.THINGIVERSE_TOKEN || '').trim(),
 
-    /** Sent upstream so the sites see a normal looking client. */
+    /**
+     * Sent upstream so the sites see a normal looking client. The major
+     * version here has to stay in step with `chromeMajor` below — real Chrome
+     * reports the same number in both places, and a mismatch is a more overt
+     * tell than any of the fields being spoofed in the first place.
+     */
     userAgent:
       process.env.USER_AGENT ||
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+
+    /**
+     * Real Chromium browsers volunteer these three low-entropy Client Hints on
+     * every request, unprompted — no `Accept-CH` round trip required, unlike
+     * the high-entropy ones (bitness, full version list, ...) a site has to ask
+     * for. A `fetch()` from Node sends none of them, which is a cleaner
+     * distinguishing signal than the User-Agent string ever was. This only
+     * matches what a stock browser already discloses; it cannot reproduce the
+     * TLS/HTTP2 handshake fingerprint an actual Chromium network stack has, so
+     * it will not get past a challenge that checks that instead of headers.
+     */
+    chromeMajor: 131,
   });
 
   return config;

@@ -151,7 +151,7 @@ test('Printables paginates by offset', async () => {
   );
 });
 
-test('MakerWorld still answers on select/design2 with a populated hit list', async () => {
+test('MakerWorld still answers on api.bambulab.com select/design2 with a populated hit list', async () => {
   const { items, total } = await makerworld.search(QUERY, { limit: 12 });
 
   // The exact failure that went unnoticed: a 200 with nothing in it.
