@@ -200,7 +200,7 @@ test('sniffImageType recognises the five formats and nothing else', () => {
 });
 
 /**
- * MakerWorld's CDN labels a good half of its thumbnails `application/octet-stream`,
+ * The other famous site's CDN labels a good half of its thumbnails `application/octet-stream`,
  * so trusting the declared type is not an option in either direction: it is both
  * attacker-influenced and, on a real source, simply wrong.
  */

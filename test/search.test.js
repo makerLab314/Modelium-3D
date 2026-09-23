@@ -42,7 +42,7 @@ test('merge reports a failed source without dropping the healthy ones', () => {
       okReport('printables', [hit('printables', 'Voronoi Lamp')]),
       {
         source: 'makerworld',
-        sourceLabel: 'MakerWorld',
+        sourceLabel: 'The other famous site',
         status: 'blocked',
         items: [],
         total: 0,

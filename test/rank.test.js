@@ -104,7 +104,7 @@ test('sortResults honours popular and newest', () => {
 /**
  * The bug this whole group exists for: Thingiverse showed up no earlier than
  * rank 16, and under Newest not until rank 71, so the first two pages were only
- * ever Printables and MakerWorld.
+ * ever Printables and the other famous site.
  */
 
 const dated = (source, title, date, stats = { likes: 10, downloads: 10 }) => ({
@@ -114,7 +114,7 @@ const dated = (source, title, date, stats = { likes: 10, downloads: 10 }) => ({
 
 test('a site whose titles are verbose still reaches the first page', () => {
   // Every site's top hit is equally good; only the wording differs. This is the
-  // shape MakerWorld results take — descriptive titles where the other two are
+  // shape the other famous site results take — descriptive titles where the other two are
   // terse — and it used to cost the site the whole top of the list.
   const terse = {
     source: 'terse',
@@ -123,7 +123,7 @@ test('a site whose titles are verbose still reaches the first page', () => {
   const verbose = {
     source: 'verbose',
     items: Array.from({ length: 20 }, (_, i) =>
-      item('verbose', `Voronoi Lamp for the Bambu P1S with an E27 mount, variant ${i}`),
+      item('verbose', `Voronoi Lamp for the P1S with an E27 mount, variant ${i}`),
     ),
   };
 
@@ -220,7 +220,7 @@ test('a source that reports no dates at all is not pushed below every dated resu
 });
 
 test('popular does not let one site’s scale drown another’s', () => {
-  // Thingiverse counts likes in the tens of thousands where MakerWorld counts
+  // Thingiverse counts likes in the tens of thousands where the other famous site counts
   // them in the hundreds. Comparing the raw numbers is comparing nothing.
   const huge = Array.from({ length: 12 }, (_, i) =>
     item('huge', `Model ${i}`, { stats: { likes: 40000 - i * 100, downloads: 0 } }),

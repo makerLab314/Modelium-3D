@@ -1,8 +1,8 @@
 {
   "name": "modelium-3d",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "type": "module",
-  "description": "One search box for Printables, Thingiverse and MakerWorld.",
+  "description": "One search box for Printables, Thingiverse and the other famous site.",
   "keywords": [
     "3d-printing",
     "printables",

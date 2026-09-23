@@ -2,9 +2,9 @@
  * Live structure canary.
  *
  * These are the only tests that talk to the real sites. They exist to answer
- * one question: do Printables, MakerWorld and Thingiverse still return data in
+ * one question: do Printables, the other famous site and Thingiverse still return data in
  * the shape the adapters read? Every one of the three has broken silently
- * before — MakerWorld's old endpoint kept answering 200 with an empty list for
+ * before — the other famous site's old endpoint kept answering 200 with an empty list for
  * weeks — so the assertions are deliberately about *structure*, never about
  * which models come back or how many.
  *
@@ -85,7 +85,7 @@ function assertDated(items, source) {
  * The order asked for has to be the order that comes back.
  *
  * Both remaining ways this can fail are silent. Printables rejects an unknown
- * `ordering` outright, but MakerWorld ignores one and answers 200 in its default
+ * `ordering` outright, but the other famous site ignores one and answers 200 in its default
  * order, and Thingiverse does the same — so "the request succeeded" says nothing
  * about whether the sort took. Comparing the two result sets is what does.
  */
@@ -151,24 +151,24 @@ test('Printables paginates by offset', async () => {
   );
 });
 
-test('MakerWorld still answers on api.bambulab.com select/design2 with a populated hit list', async () => {
+test('The other famous site still answers on the app host select/design2 with a populated hit list', async () => {
   const { items, total } = await makerworld.search(QUERY, { limit: 12 });
 
   // The exact failure that went unnoticed: a 200 with nothing in it.
-  assert.ok(items.length > 0, 'MakerWorld returned no items — endpoint likely retired again');
-  assert.ok(total > 0, 'MakerWorld reported a zero total for a common term');
+  assert.ok(items.length > 0, 'The other famous site returned no items — endpoint likely retired again');
+  assert.ok(total > 0, 'The other famous site reported a zero total for a common term');
 
   items.forEach((item) => assertShape(item, 'makerworld'));
   assert.ok(
     items.every((item) => item.url.startsWith('https://makerworld.com/en/models/')),
-    'MakerWorld model URLs no longer match the expected pattern',
+    'The other famous site model URLs no longer match the expected pattern',
   );
   assertSomeStats(items, ['likes', 'downloads'], 'makerworld');
   assertDated(items, 'makerworld');
 });
 
 /**
- * Deliberately only `popular`. MakerWorld's search takes a field name for
+ * Deliberately only `popular`. The other famous site's search takes a field name for
  * `orderBy` and recognises `score`, `likeCount`, `downloadCount`,
  * `collectionCount` and `printCount` — no date field at all. `createTime`,
  * `publishTime`, `updateTime`, `latest`, `new` and `recent` were each tried
@@ -176,7 +176,7 @@ test('MakerWorld still answers on api.bambulab.com select/design2 with a populat
  * the adapter maps `newest` onto `score` and lib/rank.js re-ranks by date
  * afterwards instead of trusting the site's order.
  */
-test('MakerWorld honours the most-liked ordering', async () => {
+test('The other famous site honours the most-liked ordering', async () => {
   const relevance = await makerworld.search(QUERY, { limit: 12, sort: 'relevance' });
   const popular = await makerworld.search(QUERY, { limit: 12, sort: 'popular' });
 
@@ -185,21 +185,21 @@ test('MakerWorld honours the most-liked ordering', async () => {
 
   assert.ok(
     shared < popular.items.length,
-    'MakerWorld ignored orderBy=likeCount — it answers 200 in the default order rather than rejecting an unknown field',
+    'The other famous site ignored orderBy=likeCount — it answers 200 in the default order rather than rejecting an unknown field',
   );
 });
 
-test('MakerWorld paginates by offset', async () => {
+test('The other famous site paginates by offset', async () => {
   const first = await makerworld.search(QUERY, { limit: 6, offset: 0 });
   const second = await makerworld.search(QUERY, { limit: 6, offset: 6 });
 
-  assert.ok(second.items.length > 0, 'MakerWorld returned nothing for the second page');
+  assert.ok(second.items.length > 0, 'The other famous site returned nothing for the second page');
 
   const firstIds = new Set(first.items.map((item) => item.sourceId));
   const overlap = second.items.filter((item) => firstIds.has(item.sourceId));
   assert.ok(
     overlap.length < second.items.length,
-    'MakerWorld ignored offset — every second-page hit repeated the first page',
+    'The other famous site ignored offset — every second-page hit repeated the first page',
   );
 });
 

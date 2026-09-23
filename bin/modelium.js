@@ -13,7 +13,7 @@ import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 
 const HELP = `
-  modelium-3d — one search box for Printables, MakerWorld and Thingiverse
+  modelium-3d — one search box for Printables, the other famous site and Thingiverse
 
   Usage
     modelium-3d [options]

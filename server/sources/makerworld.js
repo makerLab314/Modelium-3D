@@ -2,21 +2,21 @@ import { requestJson } from '../lib/http.js';
 import { SourceError } from '../lib/errors.js';
 
 export const id = 'makerworld';
-export const label = 'MakerWorld';
+export const label = 'The other famous site';
 export const homepage = 'https://makerworld.com';
 
 /**
- * The same search service the site uses, reached through the host Bambu
- * Studio and the Bambu Handy app talk to. No key is needed.
+ * The same search service the site uses, reached through the host the
+ * vendor's own slicer and phone app talk to. No key is needed.
  *
- * Not `makerworld.com/api/...`: since September 2026 everything on
- * makerworld.com, the JSON API included, sits behind a Cloudflare managed
+ * Not the site's own `/api/...`: since September 2026 everything on the
+ * site's main domain, the JSON API included, sits behind a Cloudflare managed
  * challenge (`403` with `cf-mitigated: challenge`) that a server side fetch
- * cannot clear. `api.bambulab.com` serves the identical payload unchallenged,
+ * cannot clear. The app host serves the identical payload unchallenged,
  * and honours `orderBy` and `offset` the same way.
  *
  * Note the `2`: the older `select/design` answered 200 with an empty hit list
- * once MakerWorld moved over, which looks exactly like "nothing matched". The
+ * once the other famous site moved over, which looks exactly like "nothing matched". The
  * site also sends a `searchSessionId`, but that is analytics — omitting it
  * changes nothing about the results.
  */
@@ -31,7 +31,7 @@ const SEARCH = 'https://api.bambulab.com/v1/search-service/select/design2';
  *
  * There is deliberately no entry for `newest`: no date field is accepted.
  * `createTime`, `publishTime`, `updateTime`, `latest`, `new` and `recent` were
- * all tried and all silently fall back to `score`. MakerWorld therefore
+ * all tried and all silently fall back to `score`. The other famous site therefore
  * contributes its most relevant hits to a Newest search, re-ordered by date in
  * lib/rank.js — which is why that merge fuses by position per source rather
  * than sorting one global list by date.
@@ -57,10 +57,10 @@ export async function search(query, { limit, offset = 0, signal, sort = 'relevan
   // that as an empty result set would be a lie, so it is surfaced as blocked.
   const hits = payload?.hits;
   if (hits === null && Number(payload?.total) > 0) {
-    throw new SourceError('MakerWorld returned no items for a non-empty result set', 'blocked');
+    throw new SourceError('The other famous site returned no items for a non-empty result set', 'blocked');
   }
   if (!Array.isArray(hits)) {
-    throw new SourceError('Unexpected answer from the MakerWorld API', 'unavailable');
+    throw new SourceError('Unexpected answer from the other famous site API', 'unavailable');
   }
 
   return {

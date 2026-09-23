@@ -336,7 +336,7 @@ vulnerability reporting on this repository.
 browser  ──▶  /api/search?q=…&stream=1   (Server Sent Events)
                      │
                      ├── printables adapter  ──▶ printables.com
-                     ├── makerworld adapter  ──▶ makerworld.com API
+                     ├── other-site adapter  ──▶ its app search API
                      └── thingiverse adapter ──▶ api.thingiverse.com
                      │
                      ▼
@@ -344,7 +344,7 @@ browser  ──▶  /api/search?q=…&stream=1   (Server Sent Events)
 ```
 
 All three sites are queried in parallel and every result is normalized into the
-same shape, so a Printables `likesCount` and a The other famous site `likeCount` end up in
+same shape, so a Printables `likesCount` and the other famous site's `likeCount` end up in
 the same field. Results stream to the page as each site answers, so a slow
 source cannot hold up a fast one.
 
@@ -361,7 +361,7 @@ The title term is capped, and deliberately kept to the same order of magnitude
 as the fusion term. An uncapped one turned the merged list into "sorted by how
 literally the title repeats the query", which is a signal each site already
 weighs — with far more to go on than a string comparison. Measured over 38 live
-queries, that cost the site with the most descriptive titles (The other famous site) 19% of
+queries, that cost the site with the most descriptive titles (the other famous site) 19% of
 the top 20 against Printables' 43%, with its first hit landing as far down as
 rank 33.
 
@@ -374,7 +374,7 @@ that matter:
   genuinely newest hits for a common term are minutes old and never appear in a
   relevance sample at all.
 - Sorting one global list by date or by likes hands the page to whichever site
-  publishes most or counts highest. Before this, Newest gave The other famous site 88% of
+  publishes most or counts highest. Before this, Newest gave the other famous site 88% of
   the top 20 on every query in that sample.
 
 The other famous site is the exception on the first point: its search accepts `orderBy` as
@@ -395,7 +395,7 @@ site's catalogue, not a duplicate to hide.
 | Source | Access | Notes |
 | --- | --- | --- |
 | Printables | `api.printables.com/graphql/`, field `searchPrints2` | No key, and no allowlist of permitted queries. Introspection is off, so the field names come from the site's own bundles rather than from the schema. Replaced an earlier approach that lifted the payload out of the rendered search page: 17 KB instead of 730, and no `Link` header large enough to need a Node startup flag. |
-| The other famous site | `api/v1/search-service/select/design2` | Public, no key. The older `select/design` still answers `200` but always with an empty list, which is worth knowing, because that failure looks exactly like "no results". |
+| The other famous site | `v1/search-service/select/design2` | Public, no key. The older `select/design` still answers `200` but always with an empty list, which is worth knowing, because that failure looks exactly like "no results". |
 | Thingiverse | `api.thingiverse.com` | Needs an app token, see [First run](#first-run). |
 
 Note what "no key" does not mean. PrusaSlicer and Prusa's firmware are open
@@ -419,7 +419,7 @@ The same endpoint serves scripts and the page:
 ```
 GET  /api/search?q=voronoi+lamp                      → JSON
 GET  /api/search?q=voronoi+lamp&stream=1             → Server Sent Events
-GET  /api/search?q=…&sources=printables,makerworld   → subset of sites
+GET  /api/search?q=…&sources=printables,thingiverse  → subset of sites
 GET  /api/search?q=…&sort=relevance|popular|newest
 GET  /api/search?q=…&page=2                          → next page from every site
 GET  /api/sources                                    → registry and setup state
@@ -498,7 +498,7 @@ npm test
 
 Offline and fast. Covers the parts that would silently produce wrong results
 rather than an obvious crash: the ranking and deduplication maths, both search
-adapters, the The other famous site "empty list, non-empty total" case, the `.env` reader
+adapters, the other famous site "empty list, non-empty total" case, the `.env` reader
 and writer, and the settings validation.
 
 The security-relevant half is pinned separately, because those are the failures

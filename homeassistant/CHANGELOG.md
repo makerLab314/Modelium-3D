@@ -4,6 +4,8 @@ The add-on version tracks the Modelium release it installs, so the notes below
 cover only what changed about the add-on itself. Application changes are in the
 [project releases](https://github.com/makerLab314/Modelium-3D/releases).
 
+## 0.7.1
+
 ## 0.7.0
 
 - Fixed image proxy

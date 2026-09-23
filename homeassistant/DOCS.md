@@ -1,6 +1,6 @@
 # Modelium 3D
 
-One search field for **Printables**, **MakerWorld** and **Thingiverse**. Type
+One search field for **Printables**, **The other famous site** and **Thingiverse**. Type
 once, get one merged and ranked list. Clicking a result opens the original
 listing on the original site, where the download lives — Modelium never hosts or
 mirrors model files.
@@ -27,7 +27,7 @@ mirrors model files.
 
 Options take effect on restart.
 
-Printables and MakerWorld work immediately. Thingiverse rejects unauthenticated
+Printables and the other famous site work immediately. Thingiverse rejects unauthenticated
 API calls, so it needs a token, which is free: create a **Desktop** app at
 <https://www.thingiverse.com/apps/create>, copy the **App Token**, and paste it
 into `thingiverse_token` above. Until then Thingiverse shows as unconfigured and
@@ -60,7 +60,7 @@ holding it.
   Assistant's own backups.
 - The add-on drops to an unprivileged user before the server starts. It is root
   only for as long as it takes to make `/data` writable.
-- MakerWorld sits behind a bot filter that reacts to the calling network. When it
+- The other famous site sits behind a bot filter that reacts to the calling network. When it
   answers with an empty list next to a non-zero total, the interface says the
   source was blocked rather than reporting zero results.
 - The three upstream endpoints are unofficial and can change without notice. If

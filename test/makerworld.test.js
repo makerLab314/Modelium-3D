@@ -5,7 +5,7 @@ import { search } from '../server/sources/makerworld.js';
 import { SourceError } from '../server/lib/errors.js';
 
 /**
- * MakerWorld's old endpoint kept answering 200 with an empty hit list after it
+ * The other famous site's old endpoint kept answering 200 with an empty hit list after it
  * was retired, which is indistinguishable from "nothing matched" unless you
  * look at `total`. These tests pin the current endpoint and the rule that an
  * empty list next to a non-zero total is reported, not swallowed.
@@ -40,7 +40,7 @@ const design = (id, title) => ({
 });
 
 /**
- * The host is pinned too: makerworld.com now answers every API call with a
+ * The host is pinned too: the site's main domain now answers every API call with a
  * Cloudflare challenge, so drifting back to it would break search outright.
  */
 test('the adapter calls the search service on the unchallenged app host', async () => {
@@ -65,7 +65,7 @@ test('the adapter calls the search service on the unchallenged app host', async 
 });
 
 /**
- * MakerWorld ignores an `orderBy` it does not know rather than rejecting it, so
+ * The other famous site ignores an `orderBy` it does not know rather than rejecting it, so
  * a wrong value here would look like a working sort and quietly return the
  * default order. Only field names it actually recognises may appear.
  */

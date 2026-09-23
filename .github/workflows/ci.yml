@@ -123,7 +123,7 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
-      # Hits printables.com, makerworld.com and (only if a token is configured)
+      # Hits Printables, the other famous site and (only if a token is configured)
       # api.thingiverse.com, and asserts that each still returns the fields the
       # adapters read. Thingiverse skips itself when THINGIVERSE_TOKEN is empty,
       # so no secret is required for this to be useful.

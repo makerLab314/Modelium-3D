@@ -28,7 +28,7 @@ const SNIFF_BYTES = 16;
  * Both directions of that claim turned out to be useless. These hosts serve
  * *user uploaded* files, so a declared `text/html` — or `image/svg+xml`, which
  * carries script — would run on this origin, right next to /api/settings. And
- * MakerWorld's CDN labels a good half of its images `application/octet-stream`,
+ * The other famous site's CDN labels a good half of its images `application/octet-stream`,
  * so simply requiring a declared image type breaks real thumbnails.
  *
  * Reading the signature answers both at once: the type we send is derived from
@@ -63,7 +63,7 @@ export function sniffImageType(head) {
 
 /**
  * A ceiling against a stream that never ends, not a guess at a sensible image
- * size. MakerWorld hands out the uploaded original as its "thumbnail" and 10 MB
+ * size. The other famous site hands out the uploaded original as its "thumbnail" and 10 MB
  * is ordinary there, so a tight limit rejects real content — measured, after an
  * 8 MB version turned a live thumbnail into a 413. Nothing is buffered beyond
  * the sniff window, so a generous bound costs no memory.

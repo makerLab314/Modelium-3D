@@ -30,12 +30,12 @@ const RRF_K = 8;
  * relevance) an exact title match was worth 1.8 against an RRF span of 0.56, so
  * four results literally named "Voronoi Lamp" sitting at positions 11 to 13 of
  * one site outranked another site's number one. Over a 38 query live sample that
- * left MakerWorld — the site whose titles are the most descriptive, and so the
+ * left the other famous site — the site whose titles are the most descriptive, and so the
  * one a title-only signal punishes hardest — with 19% of the top 20 against
  * Printables' 43%, first appearing at rank 6.1 on average and as far down as 33.
  * It now averages 5.2 with a worst case of 27.
  *
- * Sweeping RRF_K over 4..12 and `relevance` over 0.6..1.2 moves MakerWorld's
+ * Sweeping RRF_K over 4..12 and `relevance` over 0.6..1.2 moves the other famous site's
  * share by two points either way, so these are a reasonable middle rather than
  * a tuned optimum. The cap in titleRelevance is what actually mattered.
  */
@@ -210,8 +210,8 @@ export const SORT_MODES = [...KEYS.keys()];
  * lists are then fused by position exactly the way relevance is.
  *
  * The reason is the same one that motivates this whole module. Sorting globally
- * by date gave MakerWorld 88% of the top 20 for every query in a 38 query
- * sample and Thingiverse 2%, not because MakerWorld's hits were better but
+ * by date gave the other famous site 88% of the top 20 for every query in a 38 query
+ * sample and Thingiverse 2%, not because the other famous site's hits were better but
  * because it uploads more per day than the other two combined — and a site that
  * cannot report a date at all (Thingiverse's search hits could not, until the
  * adapter was fixed to read `created_at`) landed below *every* dated result

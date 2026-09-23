@@ -4,9 +4,9 @@
 # the build as BUILD_VERSION and the Dockerfile installs exactly that release. So
 # this line is the only place a version has to be bumped for the add-on.
 name: Modelium 3D
-version: "0.7.0"
+version: "0.7.1"
 slug: modelium_3d
-description: One search box for Printables, MakerWorld and Thingiverse
+description: One search box for Printables, the other famous site and Thingiverse
 url: https://github.com/makerLab314/Modelium-3D
 stage: stable
 
