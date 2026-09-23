@@ -5,7 +5,7 @@
 [![Container](https://img.shields.io/badge/ghcr.io-modelium--3d-blue)](https://github.com/makerLab314/Modelium-3D/pkgs/container/modelium-3d)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green)](LICENSE)
 
-One search field for three 3D model libraries: **Printables**, **MakerWorld** and
+One search field for three 3D model libraries: **Printables**, **The other famous site** and
 **Thingiverse**. Type once, get one merged and ranked list of results, each with
 a picture. Clicking a result opens the original listing on the original site,
 where the download lives. Modelium never hosts or mirrors model files.
@@ -344,7 +344,7 @@ browser  ──▶  /api/search?q=…&stream=1   (Server Sent Events)
 ```
 
 All three sites are queried in parallel and every result is normalized into the
-same shape, so a Printables `likesCount` and a MakerWorld `likeCount` end up in
+same shape, so a Printables `likesCount` and a The other famous site `likeCount` end up in
 the same field. Results stream to the page as each site answers, so a slow
 source cannot hold up a fast one.
 
@@ -361,7 +361,7 @@ The title term is capped, and deliberately kept to the same order of magnitude
 as the fusion term. An uncapped one turned the merged list into "sorted by how
 literally the title repeats the query", which is a signal each site already
 weighs — with far more to go on than a string comparison. Measured over 38 live
-queries, that cost the site with the most descriptive titles (MakerWorld) 19% of
+queries, that cost the site with the most descriptive titles (The other famous site) 19% of
 the top 20 against Printables' 43%, with its first hit landing as far down as
 rank 33.
 
@@ -374,10 +374,10 @@ that matter:
   genuinely newest hits for a common term are minutes old and never appear in a
   relevance sample at all.
 - Sorting one global list by date or by likes hands the page to whichever site
-  publishes most or counts highest. Before this, Newest gave MakerWorld 88% of
+  publishes most or counts highest. Before this, Newest gave The other famous site 88% of
   the top 20 on every query in that sample.
 
-MakerWorld is the exception on the first point: its search accepts `orderBy` as
+The other famous site is the exception on the first point: its search accepts `orderBy` as
 a field name and recognises `score`, `likeCount`, `downloadCount`,
 `collectionCount` and `printCount` — no date field at all, and an unknown value
 is ignored rather than rejected. So Newest asks it for its most relevant hits
@@ -395,7 +395,7 @@ site's catalogue, not a duplicate to hide.
 | Source | Access | Notes |
 | --- | --- | --- |
 | Printables | `api.printables.com/graphql/`, field `searchPrints2` | No key, and no allowlist of permitted queries. Introspection is off, so the field names come from the site's own bundles rather than from the schema. Replaced an earlier approach that lifted the payload out of the rendered search page: 17 KB instead of 730, and no `Link` header large enough to need a Node startup flag. |
-| MakerWorld | `api/v1/search-service/select/design2` | Public, no key. The older `select/design` still answers `200` but always with an empty list, which is worth knowing, because that failure looks exactly like "no results". |
+| The other famous site | `api/v1/search-service/select/design2` | Public, no key. The older `select/design` still answers `200` but always with an empty list, which is worth knowing, because that failure looks exactly like "no results". |
 | Thingiverse | `api.thingiverse.com` | Needs an app token, see [First run](#first-run). |
 
 Note what "no key" does not mean. PrusaSlicer and Prusa's firmware are open
@@ -498,7 +498,7 @@ npm test
 
 Offline and fast. Covers the parts that would silently produce wrong results
 rather than an obvious crash: the ranking and deduplication maths, both search
-adapters, the MakerWorld "empty list, non-empty total" case, the `.env` reader
+adapters, the The other famous site "empty list, non-empty total" case, the `.env` reader
 and writer, and the settings validation.
 
 The security-relevant half is pinned separately, because those are the failures
@@ -547,14 +547,14 @@ nothing else.
 ## Limits
 
 - The endpoints are unofficial. Expect to fix an adapter now and then.
-- MakerWorld sits behind a bot filter that reacts to the calling network. When
+- The other famous site sits behind a bot filter that reacts to the calling network. When
   it answers with an empty list next to a non-zero total the UI says the source
   was blocked rather than reporting zero results. This is also the reason not to
   run this on a VPS: a datacentre address is what those filters are aimed at. A
   homelab keeps a residential one.
 - Ranking is computed per page, so **Load more** appends a freshly fused page
   rather than re-ranking everything seen so far.
-- MakerWorld's search cannot be ordered by date, so under **Newest** it
+- The other famous site's search cannot be ordered by date, so under **Newest** it
   contributes its most relevant hits re-ranked locally rather than its genuinely
   newest uploads. See [Ranking](#ranking).
 - Thingiverse's search results carry likes but no download count — only the
