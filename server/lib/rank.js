@@ -180,26 +180,32 @@ export function dedupe(items) {
   return merged;
 }
 
-/**
- * A Map rather than an object literal, because `mode` reaches this from a query
- * string.
- *
- * As a plain object, `KEYS[mode]` also answers for everything on
- * Object.prototype. `?sort=__proto__` returns Object.prototype itself — not
- * nullish, so the `??` below would not catch it — and calling it throws
- * "not a function", which is a 500 rather than a bad request. `constructor` and
- * `toString` answer with real functions and quietly sort by nothing.
- *
- * app.js does check the parameter against SORT_MODES before it ever gets here,
- * so none of that is reachable today. This is about the next caller.
- */
-const KEYS = new Map([
-  ['relevance', null],
-  ['popular', rawPopularity],
-  ['newest', timestamp],
-]);
+export const SORT_MODES = ['relevance', 'popular', 'newest'];
 
-export const SORT_MODES = [...KEYS.keys()];
+/**
+ * A switch rather than any lookup table, because `mode` reaches this from a
+ * query string.
+ *
+ * As a plain object, `KEYS[mode]` also answered for everything on
+ * Object.prototype: `?sort=__proto__` returned Object.prototype itself, and
+ * calling it threw — a 500 rather than a bad request. A Map closed that, but
+ * still resolved the function to call from the caller's string, which CodeQL
+ * reports as an unvalidated dynamic method call. Here every function is named
+ * in the source; an unknown mode can only ever mean "no key".
+ *
+ * app.js checks the parameter against SORT_MODES before it gets here anyway.
+ * This is about the next caller.
+ */
+function keyFor(mode) {
+  switch (mode) {
+    case 'popular':
+      return rawPopularity;
+    case 'newest':
+      return timestamp;
+    default:
+      return null;
+  }
+}
 
 /**
  * Order the merged list.
@@ -220,7 +226,7 @@ export const SORT_MODES = [...KEYS.keys()];
  * since the actual key breaks the tie between equal positions.
  */
 export function sortResults(items, mode = 'relevance') {
-  const keyOf = KEYS.get(mode) ?? null;
+  const keyOf = keyFor(mode);
   if (!keyOf) return [...items].sort((a, b) => b.score - a.score);
 
   const positions = positionsWithinSource(items, keyOf);
