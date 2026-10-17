@@ -851,6 +851,241 @@ main {
   }
 }
 
+/* --- Print job: the loader ------------------------------------------------
+   A small printer builds a vase while the sites answer. `--progress` (0..1) is
+   set from app.js: each answered site is one solid step, and the time spent
+   waiting adds a creep that never reaches the next step on its own. */
+
+.job {
+  --progress: 0;
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  align-items: center;
+  gap: 1.6rem;
+  padding: 1.2rem 1.5rem;
+  margin-bottom: 1.25rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--card);
+  transition:
+    opacity 0.4s ease,
+    transform 0.4s ease;
+}
+
+.job[data-state="leaving"] {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+.job__printer {
+  position: relative;
+  height: 120px;
+}
+
+/* The whole vase, faint: what is still to print. */
+.job__print {
+  position: absolute;
+  left: 20%;
+  right: 20%;
+  bottom: 8px;
+  height: 100px;
+  clip-path: polygon(
+    30% 100%, 70% 100%, 80% 86%, 88% 64%, 84% 42%, 68% 22%, 64% 8%, 72% 0,
+    28% 0, 36% 8%, 32% 22%, 16% 42%, 12% 64%, 20% 86%
+  );
+  background: repeating-linear-gradient(to top, var(--rule) 0 1px, transparent 1px 4px);
+}
+
+/* What has been printed: solid layers growing from the bed. */
+.job__fill {
+  position: absolute;
+  inset: auto 0 0;
+  height: calc(var(--progress) * 100%);
+  background: repeating-linear-gradient(
+    to top,
+    var(--accent) 0 3px,
+    color-mix(in srgb, var(--accent) 62%, var(--card)) 3px 4px
+  );
+  transition: height 0.35s ease-out;
+}
+
+.job__gantry {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(8px + 100px * var(--progress));
+  height: 1px;
+  background: var(--rule-strong);
+  transition: bottom 0.35s ease-out;
+}
+
+.job__nozzle {
+  position: absolute;
+  bottom: 0;
+  left: 24%;
+  width: 12px;
+  height: 14px;
+  background: var(--ink-soft);
+  clip-path: polygon(0 0, 100% 0, 100% 50%, 64% 100%, 36% 100%, 0 50%);
+  animation: nozzle 1.5s ease-in-out infinite alternate;
+}
+
+/* The hot end. */
+.job__nozzle::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  bottom: 0;
+  width: 4px;
+  height: 3px;
+  background: var(--signal);
+  animation: pulse 0.7s ease-in-out infinite;
+}
+
+.job[data-state="done"] .job__nozzle,
+.job[data-state="leaving"] .job__nozzle {
+  animation-play-state: paused;
+}
+
+.job[data-state="done"] .job__nozzle::after,
+.job[data-state="leaving"] .job__nozzle::after {
+  visibility: hidden;
+}
+
+@keyframes nozzle {
+  to {
+    left: calc(76% - 12px);
+  }
+}
+
+.job__bed {
+  position: absolute;
+  left: 4%;
+  right: 4%;
+  bottom: 0;
+  height: 8px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  background: var(--paper-sunk);
+}
+
+.job__label {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+[data-job-clock] {
+  font-variant-numeric: tabular-nums;
+}
+
+.job__title {
+  margin: 0.2rem 0 0.75rem;
+  font-size: 1.12rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.job__rows {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0 0 0.9rem;
+  padding: 0;
+  list-style: none;
+}
+
+.job__row {
+  --source: var(--muted);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.88rem;
+}
+
+.job__row[data-source="printables"] {
+  --source: var(--printables);
+}
+.job__row[data-source="makerworld"] {
+  --source: var(--makerworld);
+}
+.job__row[data-source="thingiverse"] {
+  --source: var(--thingiverse);
+}
+
+.job__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+  border: 1px solid var(--source);
+  background: var(--source);
+}
+
+.job__row[data-status="loading"] .job__dot {
+  animation: pulse 0.9s ease-in-out infinite;
+}
+
+.job__row[data-status="failed"] .job__dot {
+  border-color: var(--signal);
+  background: transparent;
+}
+
+.job__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job__status {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.job__row[data-status="ok"] .job__status {
+  color: var(--ink-soft);
+}
+
+.job__row[data-status="failed"] .job__status {
+  color: var(--signal);
+}
+
+.job__track {
+  height: 3px;
+  background: var(--rule);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.job__bar {
+  display: block;
+  height: 100%;
+  width: calc(var(--progress) * 100%);
+  background: var(--accent);
+  transition: width 0.35s ease-out;
+}
+
+@media (max-width: 640px) {
+  .job {
+    grid-template-columns: 82px minmax(0, 1fr);
+    gap: 1rem;
+    padding: 1rem;
+  }
+
+  .job__printer {
+    transform: scale(0.62);
+    transform-origin: left center;
+    width: 132px;
+  }
+}
+
 /* --- Empty and notice states -------------------------------------------- */
 
 .state {

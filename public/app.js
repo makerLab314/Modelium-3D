@@ -38,6 +38,11 @@ const el = {
   moreButton: document.querySelector("[data-more-button]"),
   moreLabel: document.querySelector("[data-more-label]"),
   listsCount: document.querySelector("[data-lists-count]"),
+  job: document.querySelector("[data-job]"),
+  jobPhase: document.querySelector("[data-job-phase]"),
+  jobClock: document.querySelector("[data-job-clock]"),
+  jobTitle: document.querySelector("[data-job-title]"),
+  jobRows: document.querySelector("[data-job-rows]"),
 };
 
 const RECENT_KEY = "modelium.recent";
@@ -274,6 +279,7 @@ function runSearch(query, { page = 1 } = {}) {
 
   if (!append) {
     showSkeletons(selected.length);
+    startJob(selected);
     hideState();
     el.bar.hidden = false;
     el.count.textContent = "Searching";
@@ -295,6 +301,7 @@ function runSearch(query, { page = 1 } = {}) {
     const report = JSON.parse(event.data);
     state.reports.set(report.source, report);
     setPlate(report.source, report.status === "ok" ? "ok" : report.status, report.count ?? 0);
+    updateJob(report);
   });
 
   stream.addEventListener("results", (event) => {
@@ -310,6 +317,7 @@ function runSearch(query, { page = 1 } = {}) {
     state.stream = null;
     el.submit.disabled = false;
     render();
+    finishJob();
     const answered = [...state.reports.values()].filter((report) => report.status === "ok");
     const allCached = answered.length > 0 && answered.every((report) => report.cached);
     el.timing.textContent = allCached ? "from cache" : `${(tookMs / 1000).toFixed(1)}s`;
@@ -318,6 +326,7 @@ function runSearch(query, { page = 1 } = {}) {
   stream.onerror = () => {
     stream.close();
     state.stream = null;
+    stopJob();
     el.submit.disabled = false;
     el.moreButton.disabled = false;
     el.moreLabel.textContent = "Load more";
@@ -571,6 +580,119 @@ function showSkeletons(sourceCount) {
   el.grid.replaceChildren(...cards);
   el.grid.parentElement.querySelectorAll(".notice").forEach((node) => node.remove());
   el.more.hidden = true;
+}
+
+/* --- Print job: the loader ------------------------------------------------ */
+
+const JOB_FAILED = {
+  "needs-key": "no token",
+  timeout: "timed out",
+  blocked: "turned us away",
+  misconfigured: "not available here",
+};
+
+/** Below this the panel is not worth the flash; a cached search lands here. */
+const JOB_MIN_SHOWN_MS = 400;
+
+const job = { total: 0, answered: 0, startedAt: 0, ticker: 0, leave: 0, rows: new Map() };
+
+function startJob(selected) {
+  clearInterval(job.ticker);
+  clearTimeout(job.leave);
+
+  job.total = selected.length;
+  job.answered = 0;
+  job.startedAt = performance.now();
+  job.rows.clear();
+
+  el.jobRows.replaceChildren(
+    ...selected.map((id) => {
+      const status = element("span", { class: "job__status" }, "querying…");
+      const row = element("li", { class: "job__row", "data-source": id, "data-status": "loading" });
+      row.append(
+        element("span", { class: "job__dot" }),
+        element("span", { class: "job__name" }, labelOf(id)),
+        status,
+      );
+      job.rows.set(id, { row, status });
+      return row;
+    }),
+  );
+
+  el.job.hidden = false;
+  el.job.dataset.state = "running";
+  el.jobTitle.textContent =
+    job.total === 1 ? `Asking ${labelOf(selected[0])}` : `Asking ${job.total} libraries at once`;
+
+  tickJob();
+  job.ticker = setInterval(tickJob, 100);
+}
+
+/**
+ * Each answered site is one solid step of the print. In between, the time spent
+ * waiting adds a creep that eases toward — but never reaches — the next step, so
+ * the printer keeps moving on a slow site without claiming progress it has not
+ * made.
+ */
+function tickJob() {
+  const elapsed = performance.now() - job.startedAt;
+  const step = 1 / Math.max(1, job.total);
+  const creep = job.answered < job.total ? step * 0.8 * (1 - Math.exp(-elapsed / 2500)) : 0;
+  const progress = Math.min(1, job.answered * step + creep);
+
+  el.job.style.setProperty("--progress", progress.toFixed(3));
+  el.jobClock.textContent = `${(elapsed / 1000).toFixed(1)}s`;
+  el.jobPhase.textContent =
+    job.answered === 0
+      ? elapsed < 600
+        ? "Heating nozzle"
+        : "First layer"
+      : `Layer ${job.answered} of ${job.total}`;
+}
+
+function updateJob(report) {
+  const entry = job.rows.get(report.source);
+  if (!entry || entry.row.dataset.status !== "loading") return;
+
+  const ok = report.status === "ok";
+  entry.row.dataset.status = ok ? "ok" : "failed";
+  entry.status.textContent = ok
+    ? `${plain.format(report.count ?? 0)} models${report.cached ? " · cache" : ""}`
+    : (JOB_FAILED[report.status] ?? "unavailable");
+
+  job.answered += 1;
+  if (job.answered < job.total) {
+    const left = job.total - job.answered;
+    el.jobTitle.textContent = `${job.answered} in, waiting on ${left === 1 ? "one more" : left}`;
+  }
+  tickJob();
+}
+
+function finishJob() {
+  if (el.job.hidden) return;
+  clearInterval(job.ticker);
+
+  const elapsed = performance.now() - job.startedAt;
+  if (elapsed < JOB_MIN_SHOWN_MS) return stopJob();
+
+  job.answered = job.total;
+  tickJob();
+  el.job.dataset.state = "done";
+  el.jobPhase.textContent = "Done";
+  el.jobTitle.textContent = "Print finished";
+
+  // Long enough to see the vase complete, then out of the way of the results.
+  job.leave = setTimeout(() => {
+    el.job.dataset.state = "leaving";
+    job.leave = setTimeout(stopJob, 400);
+  }, 700);
+}
+
+function stopJob() {
+  clearInterval(job.ticker);
+  clearTimeout(job.leave);
+  el.job.hidden = true;
+  el.job.dataset.state = "idle";
 }
 
 function showState(title, body) {
