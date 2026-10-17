@@ -52,6 +52,9 @@ export async function searchSource(sourceId, query, { signal, page = 1, sort = '
     return visible(result);
   } catch (error) {
     const known = error instanceof SourceError;
+    // The only trace an upstream failure leaves — without it the add-on log
+    // shows nothing but the startup banner. The query stays out of it.
+    if (!signal?.aborted) console.warn(`[${source.id}] ${error.message}`);
     return report(source.id, source.label, known ? error.kind : 'error', {
       message: known ? error.message : `Unexpected failure: ${error.message}`,
       docsUrl: error.docsUrl ?? null,

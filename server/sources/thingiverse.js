@@ -67,12 +67,24 @@ export async function search(query, { limit, offset = 0, signal, token, sort = '
   url.searchParams.set('per_page', String(perPage));
   url.searchParams.set('page', String(Math.floor(offset / perPage) + 1));
 
+  const options = {
+    signal,
+    headers: { 'user-agent': USER_AGENT, authorization: `Bearer ${credential}` },
+  };
+
   let payload;
   try {
-    payload = await requestJson(url.toString(), {
-      signal,
-      headers: { 'user-agent': USER_AGENT, authorization: `Bearer ${credential}` },
-    });
+    try {
+      payload = await requestJson(url.toString(), options);
+    } catch (error) {
+      // Even with the app User-Agent, Cloudflare challenges a share of requests
+      // at random — no idle threshold, query or connection reuse explained it
+      // when measured. The request straight after a challenge has gone through
+      // every time, so one retry turns an intermittent outage into a slower
+      // answer. Anything else, or a second challenge, is passed on as is.
+      if (!(error instanceof SourceError && /Cloudflare challenge/.test(error.message))) throw error;
+      payload = await requestJson(url.toString(), options);
+    }
   } catch (error) {
     // A rejected token is a setup problem, not an outage — say so, and point at
     // the page that issues a new one instead of leaving a bare 401.
