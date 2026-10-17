@@ -115,6 +115,13 @@ test('isAllowedImage matches the host exactly, not by substring', () => {
   }
 });
 
+test('serveImage fetches a URL rebuilt from the allowlist, without port or userinfo', async () => {
+  const { calls } = await withFetch([image()], () =>
+    serveImage('https://user:pw@MEDIA.printables.com:8443/media/a.webp?w=1#frag', fakeResponse()),
+  );
+  assert.deepEqual(calls, ['https://media.printables.com/media/a.webp?w=1']);
+});
+
 test('proxyUrl encodes the target so it cannot break out of the query', () => {
   assert.equal(proxyUrl('https://media.printables.com/a b.webp?x=1&y=2'),
     '/img?u=https%3A%2F%2Fmedia.printables.com%2Fa%20b.webp%3Fx%3D1%26y%3D2');

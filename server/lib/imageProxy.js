@@ -1,4 +1,5 @@
 import { Readable } from 'node:stream';
+import { config } from '../config.js';
 import { request } from './http.js';
 
 /**
@@ -75,13 +76,30 @@ const MAX_HOPS = 3;
 
 const REDIRECT_CODES = new Set([301, 302, 303, 307, 308]);
 
-export function isAllowedImage(rawUrl) {
+/**
+ * The URL to actually fetch for `rawUrl`, or null when it is not allowed.
+ *
+ * Rebuilt rather than passed through: the host comes from the allowlist entry,
+ * not from the caller's string, and only path and query are carried over. That
+ * drops a port or `user@` part the hostname check alone let through, and it is
+ * what lets CodeQL see that the caller does not choose where the request goes —
+ * checking a parsed copy and then fetching the original string reads as SSRF.
+ */
+export function allowedImageUrl(rawUrl) {
+  let url;
   try {
-    const url = new URL(rawUrl);
-    return url.protocol === 'https:' && ALLOWED_HOSTS.includes(url.hostname);
+    url = new URL(rawUrl);
   } catch {
-    return false;
+    return null;
   }
+  if (url.protocol !== 'https:') return null;
+
+  const host = ALLOWED_HOSTS.find((allowed) => allowed === url.hostname);
+  return host ? `https://${host}/${url.pathname.slice(1)}${url.search}` : null;
+}
+
+export function isAllowedImage(rawUrl) {
+  return allowedImageUrl(rawUrl) !== null;
 }
 
 export function proxyUrl(rawUrl) {
@@ -106,13 +124,19 @@ async function fetchImage(rawUrl) {
   let current = rawUrl;
 
   for (let hop = 0; hop <= MAX_HOPS; hop++) {
-    if (!isAllowedImage(current)) return { error: 400, message: 'Image host not allowed' };
+    const target = allowedImageUrl(current);
+    if (!target) return { error: 400, message: 'Image host not allowed' };
+    current = target;
 
-    const upstream = await request(current, {
-      timeoutMs: 15000,
-      redirect: 'manual',
-      headers: { accept: 'image/*' },
-    });
+    const options = { timeoutMs: 15000, redirect: 'manual', headers: headersFor(target) };
+    let upstream = await request(target, options);
+
+    // Same intermittent challenge the Thingiverse API throws; the request
+    // straight after one has gone through every time it was measured.
+    if (upstream.headers.get('cf-mitigated') === 'challenge') {
+      await upstream.body?.cancel().catch(() => {});
+      upstream = await request(target, options);
+    }
 
     if (!REDIRECT_CODES.has(upstream.status)) return { upstream };
 
@@ -128,6 +152,19 @@ async function fetchImage(rawUrl) {
   }
 
   return { error: 502, message: 'Too many redirects' };
+}
+
+/**
+ * cdn.thingiverse.com challenges the browser User-Agent exactly like the API
+ * does (see appUserAgent in config.js), which left every Thingiverse card on
+ * "preview unavailable". The other CDNs keep the default.
+ */
+function headersFor(rawUrl) {
+  const { hostname } = new URL(rawUrl);
+  const thingiverse = hostname === 'thingiverse.com' || hostname.endsWith('.thingiverse.com');
+  return thingiverse
+    ? { accept: 'image/*', 'user-agent': config.appUserAgent }
+    : { accept: 'image/*' };
 }
 
 export async function serveImage(rawUrl, response) {
