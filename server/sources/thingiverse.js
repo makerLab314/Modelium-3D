@@ -10,16 +10,6 @@ const API = 'https://api.thingiverse.com';
 const TOKEN_DOCS = 'https://www.thingiverse.com/apps/create';
 
 /**
- * api.thingiverse.com sits behind a Cloudflare rule that challenges every
- * request whose User-Agent claims to be a browser — Chrome and Firefox alike —
- * since Node's TLS handshake gives the claim away. Node's own `node` UA is
- * challenged too. A plain app name passes, and is the honest answer for a
- * client that already identifies itself with an app token. Keep it bare:
- * appending a `(+https://…)` contact URL got challenged again when tested.
- */
-const USER_AGENT = 'Modelium-3D';
-
-/**
  * Thingiverse renders its search client side and its REST API refuses every
  * unauthenticated call, so this is the one source that needs a key. An app
  * token is free: create a "Desktop" app at the URL above, copy the App Token
@@ -69,7 +59,8 @@ export async function search(query, { limit, offset = 0, signal, token, sort = '
 
   const options = {
     signal,
-    headers: { 'user-agent': USER_AGENT, authorization: `Bearer ${credential}` },
+    // See appUserAgent in config.js: the browser one is challenged here.
+    headers: { 'user-agent': config.appUserAgent, authorization: `Bearer ${credential}` },
   };
 
   let payload;

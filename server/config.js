@@ -87,6 +87,16 @@ export function refreshConfig() {
      * it will not get past a challenge that checks that instead of headers.
      */
     chromeMajor: 131,
+
+    /**
+     * What Thingiverse gets instead of `userAgent`. Its API and its image CDN
+     * sit behind a Cloudflare rule that challenges every User-Agent claiming
+     * to be a browser — Node's TLS handshake gives the claim away — and Node's
+     * own `node` as well. A plain app name passes, and is the honest answer for
+     * a client that already identifies itself with an app token. Keep it bare:
+     * appending a `(+https://…)` contact URL got challenged again when tested.
+     */
+    appUserAgent: 'Modelium-3D',
   });
 
   return config;
